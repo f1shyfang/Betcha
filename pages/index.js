@@ -37,102 +37,150 @@ export default function Home() {
 
   return (
     <main className="page">
+      <header className="topbar" aria-label="Primary navigation">
+        <div className="brand-lockup">
+          <span className="brand-mark">B</span>
+          <div>
+            <div className="brand-name">Betcha</div>
+            <div className="brand-tag">Social prediction markets for friends</div>
+          </div>
+        </div>
+        <a className="topbar-link" href="#join">
+          Join the waitlist
+        </a>
+      </header>
+
       <section className="hero">
         <div className="hero-copy">
-          <div className="eyebrow">Betcha</div>
-          <h1>Private prediction markets for friends.</h1>
+          <div className="eyebrow">Invite-only beta</div>
+          <h1>Make markets on anything. Keep it fun. Keep it real.</h1>
           <p className="subhead">
-            Turn ordinary moments into light stakes, real follow-through, and
-            group rituals. Betcha is invite-only, social-first, and built for
-            accountability and fun.
+            Betcha turns group accountability into something people actually want to
+            check. Build a market, invite your friends, watch the odds move, and
+            resolve the result together.
           </p>
 
-          <form className="form" onSubmit={submit}>
-            <label className="label">
-              Email
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@domain.com"
-                required
-              />
-            </label>
-            <label className="label">
-              Name (optional)
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Ada Lovelace"
-              />
-            </label>
+          <div className="hero-stats" aria-label="Product highlights">
+            <div>
+              <strong>Private by default</strong>
+              <span>Share one link with your group.</span>
+            </div>
+            <div>
+              <strong>Score-only v1</strong>
+              <span>No money custody. Less friction.</span>
+            </div>
+            <div>
+              <strong>Made for rituals</strong>
+              <span>Chores, habits, game night, and more.</span>
+            </div>
+          </div>
+
+          <form id="join" className="form" onSubmit={submit}>
+            <div className="form-row">
+              <label className="label">
+                Email
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@domain.com"
+                  required
+                />
+              </label>
+              <label className="label">
+                Name
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ada"
+                />
+              </label>
+            </div>
             <button className="button" type="submit" disabled={status === 'loading'}>
-              {status === 'loading' ? 'Submitting...' : 'Join the waitlist'}
+              {status === 'loading' ? 'Joining...' : 'Join the waitlist'}
             </button>
           </form>
 
           {message && (
-            <div className={`message ${status}`} role="status">
+            <div className={`message ${status}`} role="status" aria-live="polite">
               {message}
             </div>
           )}
 
-          <div className="meta">
-            Score-only in v1. No money custody. Launch invites first.
-          </div>
+          <p className="meta">
+            Invite-only first. Score-only at launch. Built for accountability and fun,
+            not finance bros.
+          </p>
         </div>
 
-        <div className="hero-panel">
-          <div className="panel-title">The Betcha loop</div>
-          <ol className="panel-steps">
-            <li>
-              <strong>Create a market</strong>
-              <span>Gym streak, chores, or game night outcomes.</span>
-            </li>
-            <li>
-              <strong>Invite your group</strong>
-              <span>Private by default. Share a single link.</span>
-            </li>
-            <li>
-              <strong>Make predictions</strong>
-              <span>Light stakes, fast feedback, real accountability.</span>
-            </li>
-            <li>
-              <strong>Resolve + leaderboard</strong>
-              <span>Score-only wins to keep it simple and social.</span>
-            </li>
-          </ol>
+        <div className="hero-panel" aria-label="Example markets">
+          <div className="panel-title">What Betcha feels like</div>
+          <div className="market-stack">
+            <article className="market-card">
+              <div className="market-head">
+                <span className="market-pill live">Live</span>
+                <span className="market-chip">Friends only</span>
+              </div>
+              <h3>Will Sam hit the gym 4 times this week?</h3>
+              <div className="odds-row">
+                <div><strong>62%</strong><span>Yes</span></div>
+                <div><strong>38%</strong><span>No</span></div>
+              </div>
+            </article>
+            <article className="market-card accent">
+              <div className="market-head">
+                <span className="market-pill">Season 3</span>
+                <span className="market-chip">Accountability</span>
+              </div>
+              <h3>Will the apartment be clean by Friday night?</h3>
+              <div className="market-footer">
+                <span>8 participants</span>
+                <span>Last updated 2m ago</span>
+              </div>
+            </article>
+            <article className="market-card dark">
+              <div className="market-head">
+                <span className="market-pill">Resolved</span>
+                <span className="market-chip">Game night</span>
+              </div>
+              <h3>Will Mia win the trivia rematch?</h3>
+              <div className="market-footer">
+                <span>Outcome: No</span>
+                <span>Leaderboards updated</span>
+              </div>
+            </article>
+          </div>
         </div>
       </section>
 
-      <section className="cards">
+      <section className="cards" aria-label="Why Betcha">
         <div className="card">
           <h3>Accountability-first</h3>
-          <p>Gym, chores, and weekly rituals stay on track with friendly stakes.</p>
+          <p>Turn habits, chores, and plans into a shared loop people can see.</p>
         </div>
         <div className="card">
           <h3>Invite-only groups</h3>
-          <p>Private markets, shared in group chats, no public noise.</p>
+          <p>Private markets keep the vibe small, social, and low-noise.</p>
         </div>
         <div className="card">
-          <h3>Season-ready</h3>
-          <p>Built to evolve into recurring seasons once the core loop sticks.</p>
+          <h3>Fast to start</h3>
+          <p>Create a market in seconds, then let the group do the rest.</p>
         </div>
       </section>
 
       <section className="use-cases">
         <div className="use-case">
           <h4>Accountability</h4>
-          <p>12-week gym seasons, roommate chores, daily habits.</p>
+          <p>Gym streaks, chores, daily habits, and weekly check-ins.</p>
         </div>
         <div className="use-case">
           <h4>Fun</h4>
-          <p>Game night outcomes, social dares, friendly rivalry.</p>
+          <p>Game night outcomes, social dares, and friendly rivalry.</p>
         </div>
         <div className="use-case">
-          <h4>Social rituals</h4>
-          <p>Recurring markets that keep the group talking offline.</p>
+          <h4>Rituals</h4>
+          <p>Recurring markets that give your group something to return to.</p>
         </div>
       </section>
     </main>

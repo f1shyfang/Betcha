@@ -1,7 +1,6 @@
-const { supabase } = require('../../server/supabaseClient');
 const { applyCors } = require('../../server/cors');
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   if (applyCors(req, res)) return;
 
   if (req.method !== 'POST') {
@@ -15,18 +14,42 @@ module.exports = async function handler(req, res) {
   if (!emailOk) return res.status(400).json({ error: 'invalid email' });
 
   try {
-    const insert = { email: email.toLowerCase(), name: name || null, source: source || null };
-    const { data, error } = await supabase.from('waitlist').insert([insert]).select();
-    if (error) {
-      if ((error.message && error.message.toLowerCase().includes('duplicate')) || error.code === '23505') {
-        return res.status(200).json({ message: 'already signed up' });
-      }
-      console.error('Supabase insert error', error);
-      return res.status(500).json({ error: 'db_error', details: error.message || error });
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(500).json({ error: 'waitlist_not_configured' });
     }
+
+    const insert = { email: email.toLowerCase(), name: name || null, source: source || null };
+    const response = await fetch(`${supabaseUrl.replace(/\/$/, '')}/rest/v1/waitlist?on_conflict=email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        Prefer: 'resolution=ignore-duplicates,return=representation'
+      },
+      body: JSON.stringify(insert)
+    });
+
+    if (!response.ok) {
+      const details = await response.text();
+      console.error('Supabase insert error', response.status, details);
+      return res.status(response.status).json({ error: 'db_error', details });
+    }
+
+    const data = await response.json();
+    if (Array.isArray(data) && data.length > 0) {
+      return res.status(200).json({ success: true, entry: data[0] });
+    }
+
     return res.status(200).json({ success: true, entry: data && data[0] ? data[0] : null });
   } catch (e) {
     console.error('Waitlist error', e);
     return res.status(500).json({ error: 'internal' });
   }
-};
+}
+
+module.exports = handler;
+module.exports.default = handler;

@@ -4,7 +4,7 @@ const { getIdempotentResponse, storeIdempotentResponse } = require('../../../../
 const { getUserFromRequest } = require('../../../../server/supabaseAuth');
 const { applyCors } = require('../../../../server/cors');
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   if (applyCors(req, res)) return;
 
   if (req.method !== 'POST') {
@@ -33,4 +33,7 @@ module.exports = async function handler(req, res) {
     console.error('resolve route error', e);
     return res.status(500).json({ error: 'internal' });
   }
-};
+}
+
+module.exports = handler;
+module.exports.default = handler;
