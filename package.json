@@ -1,0 +1,19 @@
+{
+  "name": "hackerhouse",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "migrate": "node server/migrations/run_migrations.js",
+    "test": "node test/resolve.e2e.test.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.0.0",
+    "next": "14.2.5",
+    "pg": "^8.11.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}

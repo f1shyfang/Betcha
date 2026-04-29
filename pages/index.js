@@ -1,10 +1,20 @@
 import { useState } from 'react';
+import { useRouter } from 'next/router';
+import { createMarket } from '../lib/api';
 
 export default function Home() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [status, setStatus] = useState('idle');
   const [message, setMessage] = useState('');
+
+  // Quick-create market state
+  const [showQuickCreate, setShowQuickCreate] = useState(false);
+  const [quickTitle, setQuickTitle] = useState('');
+  const [quickGroupId, setQuickGroupId] = useState('');
+  const [quickCreating, setQuickCreating] = useState(false);
+  const [quickError, setQuickError] = useState('');
 
   const submit = async (e) => {
     e.preventDefault();
@@ -32,6 +42,28 @@ export default function Home() {
     } catch (err) {
       setStatus('error');
       setMessage('Network error. Try again.');
+    }
+  };
+
+  const handleQuickCreate = async (e) => {
+    e.preventDefault();
+    if (!quickTitle.trim()) return;
+    setQuickCreating(true);
+    setQuickError('');
+    try {
+      const result = await createMarket({
+        title: quickTitle.trim(),
+        groupId: quickGroupId || undefined,
+      });
+      if (result.market?.group_id) {
+        router.push(`/groups/${result.market.group_id}`);
+      } else if (result.market?.id) {
+        router.push(`/markets/${result.market.id}`);
+      }
+    } catch (err) {
+      setQuickError(err.message || 'Failed to create market');
+    } finally {
+      setQuickCreating(false);
     }
   };
 
@@ -152,6 +184,52 @@ export default function Home() {
             </article>
           </div>
         </div>
+      </section>
+
+      <section className="quick-create-section" aria-label="Quick create market">
+        <div className="quick-create-header">
+          <h2>Create a market in seconds</h2>
+          <p className="subhead">Type a question, pick a group, and you're live.</p>
+        </div>
+        {!showQuickCreate ? (
+          <button className="button" onClick={() => setShowQuickCreate(true)}>
+            + Create a market
+          </button>
+        ) : (
+          <form className="create-form" onSubmit={handleQuickCreate}>
+            <label className="label">
+              Your market question
+              <input
+                type="text"
+                value={quickTitle}
+                onChange={(e) => setQuickTitle(e.target.value)}
+                placeholder="Will Alex finish the project by Friday?"
+                required
+                autoFocus
+              />
+            </label>
+            <label className="label">
+              Group ID (optional)
+              <input
+                type="text"
+                value={quickGroupId}
+                onChange={(e) => setQuickGroupId(e.target.value)}
+                placeholder="Paste a group ID from your dashboard"
+              />
+            </label>
+            <div className="form-row">
+              <button className="button" type="submit" disabled={quickCreating}>
+                {quickCreating ? 'Creating...' : 'Create market'}
+              </button>
+              <button className="button button-ghost" type="button" onClick={() => setShowQuickCreate(false)}>
+                Cancel
+              </button>
+            </div>
+            {quickError && (
+              <div className="message error" role="alert">{quickError}</div>
+            )}
+          </form>
+        )}
       </section>
 
       <section className="cards" aria-label="Why Betcha">

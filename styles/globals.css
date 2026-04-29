@@ -438,6 +438,485 @@ input:focus {
   }
 }
 
+/* ─── Quick Create (Landing) ─── */
+
+.quick-create-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 28px;
+  box-shadow: 0 18px 36px rgba(18, 20, 23, 0.06);
+  display: grid;
+  gap: 16px;
+  animation: rise-in 900ms ease-out both;
+}
+
+.quick-create-header h2 {
+  font-family: 'Cabinet Grotesk', sans-serif;
+  font-size: 28px;
+  margin: 0 0 6px;
+  letter-spacing: -0.03em;
+}
+
+.quick-create-header .subhead {
+  margin: 0;
+}
+
+/* ─── Group Dashboard ─── */
+
+.dashboard-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.dashboard-title {
+  font-family: 'Cabinet Grotesk', sans-serif;
+  font-size: clamp(28px, 4vw, 40px);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  margin: 0;
+}
+
+.dashboard-title-area {
+  max-width: 48ch;
+}
+
+.dashboard-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.button-secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 20px rgba(18, 20, 23, 0.06);
+}
+
+.button-secondary:hover:not(:disabled) {
+  background: var(--bg-deep);
+}
+
+.button-sm {
+  min-height: 36px;
+  padding: 6px 14px;
+  font-size: 14px;
+  border-radius: 12px;
+}
+
+.button-outline {
+  background: transparent;
+  color: var(--ink);
+  border: 2px solid var(--border);
+  box-shadow: none;
+}
+
+.button-outline:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: rgba(18, 20, 23, 0.03);
+}
+
+.button-ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  box-shadow: none;
+  min-height: 44px;
+  font-size: 14px;
+}
+
+.button-ghost:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.invite-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  background: rgba(0, 194, 168, 0.08);
+  border: 1px solid rgba(0, 194, 168, 0.2);
+  border-radius: 16px;
+  flex-wrap: wrap;
+}
+
+.invite-label {
+  font-family: 'Cabinet Grotesk', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--secondary);
+}
+
+.invite-link {
+  font-family: 'Geist', monospace;
+  font-size: 13px;
+  background: var(--surface);
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.create-form {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 24px;
+  display: grid;
+  gap: 14px;
+  box-shadow: 0 12px 28px rgba(18, 20, 23, 0.06);
+  animation: rise-in 300ms ease-out both;
+}
+
+.loading-state,
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--muted);
+}
+
+.empty-state h3 {
+  font-family: 'Cabinet Grotesk', sans-serif;
+  font-size: 20px;
+  color: var(--ink);
+  margin: 0 0 8px;
+}
+
+.empty-state p {
+  margin: 0;
+}
+
+.markets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.market-card[role="link"] {
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+
+.market-card[role="link"]:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 40px rgba(18, 20, 23, 0.1);
+}
+
+.market-pill.disputed {
+  background: var(--support);
+}
+
+/* ─── Market Detail ─── */
+
+.market-detail-hero {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  padding: 32px;
+  box-shadow: 0 24px 60px var(--shadow);
+  display: grid;
+  gap: 18px;
+  animation: float-in 700ms ease-out both;
+}
+
+.market-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.market-detail-title {
+  font-family: 'Cabinet Grotesk', sans-serif;
+  font-size: clamp(28px, 4vw, 40px);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  margin: 0;
+}
+
+.odds-display {
+  display: grid;
+  gap: 10px;
+}
+
+.odds-bar {
+  display: flex;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bg-deep);
+}
+
+.odds-fill {
+  height: 100%;
+  transition: width 400ms ease-out;
+}
+
+.odds-fill-yes {
+  background: linear-gradient(90deg, var(--secondary), #33d4be);
+}
+
+.odds-fill-no {
+  background: linear-gradient(90deg, #ff7478, var(--primary));
+}
+
+.odds-labels {
+  display: flex;
+  justify-content: space-between;
+}
+
+.odds-label {
+  display: grid;
+  gap: 2px;
+}
+
+.odds-label strong {
+  font-family: 'Geist', sans-serif;
+  font-size: 24px;
+  letter-spacing: -0.04em;
+}
+
+.odds-label span {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.odds-yes strong {
+  color: var(--secondary);
+}
+
+.odds-no strong {
+  color: var(--primary);
+}
+
+.resolution-banner {
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: rgba(0, 194, 168, 0.1);
+  border: 1px solid rgba(0, 194, 168, 0.2);
+}
+
+.resolution-outcome {
+  font-family: 'Cabinet Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  color: #0d6b60;
+}
+
+/* ─── Prediction Section ─── */
+
+.prediction-section,
+.resolve-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 24px;
+  display: grid;
+  gap: 14px;
+  box-shadow: 0 12px 28px rgba(18, 20, 23, 0.06);
+}
+
+.section-title {
+  font-family: 'Cabinet Grotesk', sans-serif;
+  font-size: 20px;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.prediction-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.button-predict {
+  background: var(--bg-deep);
+  color: var(--ink);
+  border: 2px solid var(--border);
+  box-shadow: none;
+  font-size: 18px;
+  font-weight: 700;
+  min-height: 56px;
+}
+
+.button-predict:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.button-predict-active {
+  transform: scale(1.02);
+}
+
+.button-predict-yes,
+.button-predict-active.button-predict-yes {
+  background: rgba(0, 194, 168, 0.1);
+  border-color: var(--secondary);
+  color: #0d6b60;
+  box-shadow: 0 8px 20px rgba(0, 194, 168, 0.15);
+}
+
+.button-predict-no,
+.button-predict-active.button-predict-no {
+  background: rgba(255, 90, 95, 0.1);
+  border-color: var(--primary);
+  color: #8c2727;
+  box-shadow: 0 8px 20px rgba(255, 90, 95, 0.15);
+}
+
+.prediction-confirmation {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* ─── Predictions List ─── */
+
+.predictions-list {
+  display: grid;
+  gap: 12px;
+}
+
+.prediction-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.prediction-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.prediction-user {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.prediction-choice {
+  font-family: 'Cabinet Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.choice-yes {
+  background: rgba(0, 194, 168, 0.12);
+  color: #0d6b60;
+}
+
+.choice-no {
+  background: rgba(255, 90, 95, 0.12);
+  color: #8c2727;
+}
+
+.prediction-result {
+  font-family: 'Cabinet Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.result-won {
+  color: var(--secondary);
+}
+
+.result-lost {
+  color: var(--primary);
+}
+
+/* ─── Leaderboard ─── */
+
+.leaderboard-section {
+  background: linear-gradient(135deg, rgba(18, 20, 23, 1), rgba(26, 29, 33, 1));
+  color: #f8fafb;
+  padding: 24px;
+  border-radius: 24px;
+  box-shadow: 0 18px 36px rgba(18, 20, 23, 0.24);
+}
+
+.leaderboard-section .section-title {
+  color: #f8fafb;
+}
+
+.leaderboard-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.leaderboard-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.leaderboard-won {
+  background: rgba(0, 194, 168, 0.12);
+  border-color: rgba(0, 194, 168, 0.2);
+}
+
+.leaderboard-lost {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.leaderboard-rank {
+  font-family: 'Geist', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+  min-width: 28px;
+}
+
+.leaderboard-name {
+  font-weight: 600;
+  font-size: 14px;
+  flex: 1;
+}
+
+.leaderboard-prediction {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.leaderboard-result {
+  font-family: 'Cabinet Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.leaderboard-section .result-won {
+  color: var(--secondary);
+}
+
+.leaderboard-section .result-lost {
+  color: var(--primary);
+}
+
+/* ─── Responsive ─── */
+
 @media (max-width: 640px) {
   .page {
     padding: 16px 16px 56px;
@@ -464,5 +943,30 @@ input:focus {
 
   .form {
     width: 100%;
+  }
+
+  .dashboard-header {
+    flex-direction: column;
+  }
+
+  .dashboard-actions {
+    width: 100%;
+  }
+
+  .markets-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .market-detail-hero {
+    padding: 24px 18px;
+  }
+
+  .prediction-buttons {
+    grid-template-columns: 1fr;
+  }
+
+  .invite-banner {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
