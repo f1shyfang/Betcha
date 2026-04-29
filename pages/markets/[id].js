@@ -9,10 +9,17 @@ export default function MarketDetail() {
   const router = useRouter();
   const { id } = router.query;
   const [market, setMarket] = useState(null);
+  const [yesCount, setYesCount] = useState(0);
+  const [noCount, setNoCount] = useState(0);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (id) fetchMarket();
+    if (!id) return;
+    fetchMarket();
+    fetchPredictionStats();
+    const timer = setInterval(fetchPredictionStats, 5000);
+    return () => clearInterval(timer);
   }, [id]);
 
   const fetchMarket = async () => {
@@ -37,6 +44,27 @@ export default function MarketDetail() {
     }
   };
 
+  const fetchPredictionStats = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || !id) return;
+
+      const res = await fetch(`/api/markets/${id}/predictions`, {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      if (!res.ok) return;
+
+      const predictions = await res.json();
+      const yes = predictions.filter((p) => p.choice === true).length;
+      const no = predictions.filter((p) => p.choice === false).length;
+      setYesCount(yes);
+      setNoCount(no);
+      setLastUpdatedAt(new Date());
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const placePrediction = async (choice) => {
     const { data: { session } } = await supabase.auth.getSession();
     const idempKey = `pred-${id}-${session.user.id}-${Date.now()}`;
@@ -49,13 +77,13 @@ export default function MarketDetail() {
       },
       body: JSON.stringify({ choice })
     });
-    fetchMarket();
+    router.reload();
   };
 
   const handleResolve = async (outcome) => {
     try {
       await resolveMarket(id, outcome);
-      fetchMarket();
+      router.reload();
     } catch (e) {
       alert(e.message);
     }
@@ -63,6 +91,10 @@ export default function MarketDetail() {
 
   if (loading) return <div className="page">Loading...</div>;
   if (!market) return <div className="page">Market not found or unauthorized.</div>;
+
+  const total = yesCount + noCount;
+  const yesPct = total > 0 ? Math.round((yesCount / total) * 100) : 50;
+  const noPct = 100 - yesPct;
 
   return (
     <div className="page">
@@ -84,6 +116,29 @@ export default function MarketDetail() {
             <span className={`market-pill ${market.state === 'open' ? 'live' : ''}`}>{market.state}</span>
           </div>
           <h1 className="market-detail-title">{market.title}</h1>
+
+          <div className="odds-display" aria-live="polite">
+            <div className="odds-bar">
+              <div className="odds-fill odds-fill-yes" style={{ width: `${yesPct}%` }} />
+              <div className="odds-fill odds-fill-no" style={{ width: `${noPct}%` }} />
+            </div>
+            <div className="odds-labels">
+              <div className="odds-label odds-yes">
+                <strong>{yesPct}%</strong>
+                <span>YES ({yesCount})</span>
+              </div>
+              <div className="odds-label odds-no" style={{ textAlign: 'right' }}>
+                <strong>{noPct}%</strong>
+                <span>NO ({noCount})</span>
+              </div>
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+              Last updated:{' '}
+              {lastUpdatedAt
+                ? lastUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                : '...'}
+            </div>
+          </div>
         </section>
 
         {market.state === 'open' && (

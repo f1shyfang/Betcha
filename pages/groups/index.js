@@ -10,6 +10,11 @@ export default function GroupsIndex() {
   const [loading, setLoading] = useState(true);
   const [newGroupName, setNewGroupName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [inviteToken, setInviteToken] = useState('');
+  const [joining, setJoining] = useState(false);
+  const [joinMessage, setJoinMessage] = useState('');
+  const [joinError, setJoinError] = useState('');
 
   useEffect(() => {
     fetchGroups();
@@ -38,8 +43,13 @@ export default function GroupsIndex() {
     e.preventDefault();
     if (!newGroupName.trim()) return;
     setCreating(true);
+    setCreateError('');
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/login');
+        return;
+      }
       const res = await fetch('/api/groups', {
         method: 'POST',
         headers: { 
@@ -51,11 +61,59 @@ export default function GroupsIndex() {
       if (res.ok) {
         setNewGroupName('');
         fetchGroups();
+      } else {
+        const data = await res.json();
+        setCreateError(data.error || 'Failed to create group');
       }
     } catch (err) {
       console.error(err);
+      setCreateError('Failed to create group');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const joinGroup = async (e) => {
+    e.preventDefault();
+    if (!inviteToken.trim()) return;
+
+    setJoining(true);
+    setJoinError('');
+    setJoinMessage('');
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/login');
+        return;
+      }
+
+      const res = await fetch('/api/groups/join', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ token: inviteToken.trim() })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setJoinError(data.error || 'Failed to join group');
+        return;
+      }
+
+      setJoinMessage('Joined group successfully.');
+      setInviteToken('');
+      await fetchGroups();
+      if (data.group_id) {
+        router.push(`/groups/${data.group_id}`);
+      }
+    } catch (err) {
+      console.error(err);
+      setJoinError('Failed to join group');
+    } finally {
+      setJoining(false);
     }
   };
 
@@ -97,6 +155,36 @@ export default function GroupsIndex() {
           <button type="submit" className="button" disabled={creating}>
             {creating ? 'Creating...' : 'Create Group'}
           </button>
+          {createError && (
+            <div className="message error" role="alert">{createError}</div>
+          )}
+        </form>
+
+        <form className="create-form" onSubmit={joinGroup} style={{ marginBottom: '32px' }}>
+          <div className="dashboard-header">
+            <h2 className="dashboard-title" style={{ fontSize: '20px' }}>Join Existing Group</h2>
+          </div>
+          <div className="form-row">
+            <label className="label">
+              Invite Token
+              <input
+                type="text"
+                value={inviteToken}
+                onChange={(e) => setInviteToken(e.target.value)}
+                placeholder="Paste invite token"
+                required
+              />
+            </label>
+          </div>
+          <button type="submit" className="button button-secondary" disabled={joining}>
+            {joining ? 'Joining...' : 'Join Group'}
+          </button>
+          {joinMessage && (
+            <div className="message success" role="status">{joinMessage}</div>
+          )}
+          {joinError && (
+            <div className="message error" role="alert">{joinError}</div>
+          )}
         </form>
 
         <section>

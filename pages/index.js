@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useRouter } from 'next/router';
-import Link from 'next/link';
 import { createMarket } from '../lib/api';
 
 export default function Home() {
@@ -78,9 +77,14 @@ export default function Home() {
             <div className="brand-tag">Social prediction markets for friends</div>
           </div>
         </div>
-        <a className="topbar-link" href="#join">
-          Join the waitlist
-        </a>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <a className="topbar-link" href="/login">
+            Login
+          </a>
+          <a className="topbar-link" href="/signup">
+            Sign up
+          </a>
+        </div>
       </header>
 
       <section className="hero">
@@ -263,24 +267,6 @@ export default function Home() {
         </div>
       </section>
 
-      <nav className="bottom-nav" aria-label="Main navigation">
-        <Link href="/" className="bottom-nav-item bottom-nav-active">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-          <span>Home</span>
-        </Link>
-        <Link href="/groups" className="bottom-nav-item">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          <span>Groups</span>
-        </Link>
-        <Link href="/markets" className="bottom-nav-item">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
-          <span>Markets</span>
-        </Link>
-        <Link href="#join" className="bottom-nav-item">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-          <span>Join</span>
-        </Link>
-      </nav>
     </main>
   );
 }
