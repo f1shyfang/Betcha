@@ -1,0 +1,25 @@
+# Vercel
+.vercel
+
+# Next.js
+.next/
+out/
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment
+.env.local
+.env.*.local
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+.nyc_output/
+coverage/
