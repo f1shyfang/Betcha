@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import supabase from '../../lib/supabase';
 import Head from 'next/head';
+import Link from 'next/link';
 
 export default function GroupDetail() {
   const router = useRouter();
@@ -24,6 +25,15 @@ export default function GroupDetail() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return router.push('/');
+
+      const groupsRes = await fetch('/api/groups', {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      if (groupsRes.ok) {
+        const groupsData = await groupsRes.json();
+        const currentGroup = groupsData.find((g) => String(g.id) === String(id));
+        setGroup(currentGroup || null);
+      }
 
       const res = await fetch(`/api/markets?group_id=${id}`, {
         headers: { Authorization: `Bearer ${session.access_token}` }
@@ -96,44 +106,60 @@ export default function GroupDetail() {
         </div>
       </header>
 
-      <main style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
-        <h1>Group Dashboard</h1>
-        
-        <section style={{ marginBottom: '2rem' }}>
-          <button className="button" onClick={createInvite}>Generate Invite Link</button>
-          {inviteToken && (
-            <div style={{ marginTop: '1rem', padding: '1rem', background: '#f0f0f0', borderRadius: '4px' }}>
-              Share this token with friends: <strong>{inviteToken}</strong>
-              <br/>
-              (They can join via POST /api/groups/join)
-            </div>
-          )}
-        </section>
+      <main>
+        <div className="dashboard-header" style={{ marginBottom: '24px' }}>
+          <div className="dashboard-title-area">
+            <h1 className="dashboard-title">{group?.name || 'Group Dashboard'}</h1>
+          </div>
+          <div className="dashboard-actions">
+            <button className="button button-secondary button-sm" onClick={createInvite}>
+              Generate Invite Link
+            </button>
+          </div>
+        </div>
 
-        <section style={{ marginBottom: '2rem' }}>
-          <h2>Create New Market</h2>
-          <form onSubmit={createMarket} style={{ display: 'flex', gap: '1rem' }}>
-            <input 
-              type="text" 
-              className="input" 
-              value={newMarketTitle}
-              onChange={(e) => setNewMarketTitle(e.target.value)}
-              placeholder="Will Sam go to the gym tomorrow?"
-              required 
-              style={{ flex: 1, padding: '0.5rem' }}
-            />
-            <button type="submit" className="button">Create</button>
-          </form>
-        </section>
+        {inviteToken && (
+          <div className="invite-banner" style={{ marginBottom: '32px' }}>
+            <span className="invite-label">Invite Token</span>
+            <span className="invite-link">{inviteToken}</span>
+            <span style={{fontSize: '12px', color: 'var(--muted)'}}>POST /api/groups/join</span>
+          </div>
+        )}
+
+        <form className="create-form" onSubmit={createMarket} style={{ marginBottom: '32px' }}>
+          <div className="dashboard-header">
+            <h2 className="dashboard-title" style={{ fontSize: '24px' }}>Create New Market</h2>
+          </div>
+          <div className="form-row">
+            <label className="label">
+              Market Question
+              <input 
+                type="text" 
+                value={newMarketTitle}
+                onChange={(e) => setNewMarketTitle(e.target.value)}
+                placeholder="Will Sam go to the gym tomorrow?"
+                required 
+              />
+            </label>
+          </div>
+          <button type="submit" className="button">Create Market</button>
+        </form>
 
         <section>
-          <h2>Markets</h2>
-          {markets.length === 0 ? <p>No markets yet.</p> : (
-            <div className="market-stack">
+          <div className="dashboard-header" style={{ marginBottom: '16px' }}>
+            <h2 className="dashboard-title" style={{ fontSize: '24px' }}>Live Markets</h2>
+          </div>
+          {markets.length === 0 ? (
+            <div className="empty-state">
+              <h3>No markets yet</h3>
+              <p>Create one above to get started.</p>
+            </div>
+          ) : (
+            <div className="markets-grid">
               {markets.map(m => (
-                <article key={m.id} className="market-card" onClick={() => router.push(`/markets/${m.id}`)} style={{cursor:'pointer'}}>
+                <article key={m.id} className={`market-card ${m.state === 'resolved' ? 'dark' : ''}`} role="link" onClick={() => router.push(`/markets/${m.id}`)}>
                   <div className="market-head">
-                    <span className="market-pill live">{m.state}</span>
+                    <span className={`market-pill ${m.state === 'open' ? 'live' : ''}`}>{m.state}</span>
                   </div>
                   <h3>{m.title}</h3>
                   <div className="market-footer">
@@ -145,20 +171,43 @@ export default function GroupDetail() {
           )}
         </section>
 
-        <section style={{ marginTop: '3rem' }}>
-          <h2>Leaderboard</h2>
-          {leaderboard.length === 0 ? <p>No scores yet.</p> : (
-            <ul style={{ listStyle: 'none', padding: 0 }}>
+        <section style={{ marginTop: '32px' }}>
+          <div className="dashboard-header" style={{ marginBottom: '16px' }}>
+            <h2 className="dashboard-title" style={{ fontSize: '24px' }}>Leaderboard</h2>
+          </div>
+          {leaderboard.length === 0 ? (
+            <div className="empty-state">
+              <p>No scores yet.</p>
+            </div>
+          ) : (
+            <div className="cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
               {leaderboard.map((entry, idx) => (
-                <li key={entry.user_id} style={{ padding: '0.5rem', borderBottom: '1px solid #ccc', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{idx + 1}. User {entry.user_id.substring(0, 8)}</span>
-                  <strong>{entry.score} pts</strong>
-                </li>
+                <div key={entry.user_id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>
+                    <strong>#{idx + 1}</strong> User {entry.user_id.substring(0, 4)}
+                  </span>
+                  <strong style={{ fontFamily: 'Geist, sans-serif', fontSize: '20px', color: 'var(--secondary)' }}>{entry.score}</strong>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </section>
       </main>
+
+      <nav className="bottom-nav" aria-label="Main navigation">
+        <Link href="/" className="bottom-nav-item">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span>Home</span>
+        </Link>
+        <Link href="/groups" className="bottom-nav-item bottom-nav-active">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>Groups</span>
+        </Link>
+        <Link href="/markets" className="bottom-nav-item">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+          <span>Markets</span>
+        </Link>
+      </nav>
     </div>
   );
 }

@@ -32,7 +32,7 @@ body {
 .page {
   max-width: 1160px;
   margin: 0 auto;
-  padding: 24px 24px 80px;
+  padding: 24px 24px 96px;
   display: grid;
   gap: 28px;
 }
@@ -913,6 +913,54 @@ input:focus {
 
 .leaderboard-section .result-lost {
   color: var(--primary);
+}
+
+/* ─── Bottom Navigation ─── */
+
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  border-top: 1px solid var(--border);
+  padding: 8px 0 calc(8px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -4px 20px rgba(18, 20, 23, 0.06);
+}
+
+.bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'Cabinet Grotesk', sans-serif;
+  letter-spacing: 0.01em;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.bottom-nav-item:hover {
+  color: var(--ink);
+  background: rgba(18, 20, 23, 0.04);
+}
+
+.bottom-nav-active,
+.bottom-nav-item:active {
+  color: var(--primary);
+}
+
+.bottom-nav-active svg {
+  stroke: var(--primary);
 }
 
 /* ─── Responsive ─── */

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import supabase from '../../lib/supabase';
 import Head from 'next/head';
+import Link from 'next/link';
 import { resolveMarket } from '../../lib/api';
 
 export default function MarketDetail() {
@@ -25,7 +26,8 @@ export default function MarketDetail() {
       });
       if (res.ok) {
         const data = await res.json();
-        const found = data.find(m => m.id === id);
+        // Route params are strings in Next.js; normalize IDs before comparing.
+        const found = data.find((m) => String(m.id) === String(id));
         setMarket(found);
       }
       setLoading(false);
@@ -72,31 +74,67 @@ export default function MarketDetail() {
         </div>
       </header>
 
-      <main style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
-        <button onClick={() => router.push(`/groups/${market.group_id}`)} style={{marginBottom: '1rem', background:'none', border:'none', cursor:'pointer', color:'#FF5A5F'}}>
+      <main>
+        <button className="button button-ghost" onClick={() => router.push(`/groups/${market.group_id}`)} style={{ marginBottom: '16px', padding: 0 }}>
           ← Back to Group
         </button>
 
-        <h1>{market.title}</h1>
-        <p>Status: <strong>{market.state}</strong></p>
+        <section className="market-detail-hero">
+          <div className="market-detail-header">
+            <span className={`market-pill ${market.state === 'open' ? 'live' : ''}`}>{market.state}</span>
+          </div>
+          <h1 className="market-detail-title">{market.title}</h1>
+        </section>
 
         {market.state === 'open' && (
-          <section style={{ margin: '2rem 0', display:'flex', gap:'1rem' }}>
-            <button className="button" onClick={() => placePrediction(true)}>Predict YES</button>
-            <button className="button" style={{background:'#555'}} onClick={() => placePrediction(false)}>Predict NO</button>
+          <section className="prediction-section" style={{ marginTop: '24px' }}>
+            <h2 className="section-title">Place Your Prediction</h2>
+            <div className="prediction-buttons">
+              <button className="button button-predict button-predict-yes" onClick={() => placePrediction(true)}>
+                YES
+              </button>
+              <button className="button button-predict button-predict-no" onClick={() => placePrediction(false)}>
+                NO
+              </button>
+            </div>
           </section>
         )}
 
         {market.state === 'open' && (
-          <section style={{ margin: '2rem 0', padding:'1rem', border:'1px solid #ccc', borderRadius:'8px' }}>
-            <h2>Resolve Market (Creator only)</h2>
-            <div style={{display:'flex', gap:'1rem', marginTop:'1rem'}}>
-              <button className="button" onClick={() => handleResolve(true)}>Resolve YES</button>
-              <button className="button" style={{background:'#555'}} onClick={() => handleResolve(false)}>Resolve NO</button>
+          <section className="resolve-section" style={{ marginTop: '24px' }}>
+            <h2 className="section-title" style={{ fontSize: '16px', color: 'var(--muted)' }}>Creator Actions: Resolve Market</h2>
+            <div className="prediction-buttons">
+              <button className="button button-secondary" onClick={() => handleResolve(true)}>Resolve YES</button>
+              <button className="button button-secondary" onClick={() => handleResolve(false)}>Resolve NO</button>
+            </div>
+          </section>
+        )}
+
+        {market.state === 'resolved' && market.resolution && (
+          <section style={{ marginTop: '24px' }}>
+            <div className="resolution-banner">
+              <div className="resolution-outcome">
+                Outcome: {market.resolution.outcome ? 'YES' : 'NO'}
+              </div>
             </div>
           </section>
         )}
       </main>
+
+      <nav className="bottom-nav" aria-label="Main navigation">
+        <Link href="/" className="bottom-nav-item">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span>Home</span>
+        </Link>
+        <Link href="/groups" className="bottom-nav-item">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>Groups</span>
+        </Link>
+        <Link href="/markets" className="bottom-nav-item bottom-nav-active">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+          <span>Markets</span>
+        </Link>
+      </nav>
     </div>
   );
 }
