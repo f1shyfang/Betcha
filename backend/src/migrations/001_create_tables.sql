@@ -95,4 +95,13 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
   created_at timestamptz DEFAULT now()
 );
 
+-- Waitlist signups
+CREATE TABLE IF NOT EXISTS waitlist (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email text UNIQUE NOT NULL,
+  name text,
+  source text,
+  created_at timestamptz DEFAULT now()
+);
+
 COMMIT;

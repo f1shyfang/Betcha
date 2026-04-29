@@ -1,5 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const { supabase } = require('./supabaseClient');
 
 function createApp(deps) {
   const {
@@ -10,73 +11,53 @@ function createApp(deps) {
 
   const app = express();
   app.use(bodyParser.json());
+  // Populate req.user from Supabase auth (if Authorization header present)
+  const supabaseAuth = require('./supabaseAuth');
+  app.use(supabaseAuth);
+  // CORS: allow frontend origin configured via FRONTEND_URL (or allow all in dev)
+  const cors = require('cors');
+  const frontendOrigin = process.env.FRONTEND_URL || process.env.VERCEL_URL ? (process.env.FRONTEND_URL || `https://${process.env.VERCEL_URL}`) : '*';
+  app.use(cors({ origin: frontendOrigin, credentials: true }));
+
+  // Waitlist submission endpoint — stores email + name in Supabase
+  app.post('/api/waitlist', async (req, res) => {
+    const { email, name, source } = req.body || {};
+    if (!email || typeof email !== 'string') return res.status(400).json({ error: 'email required' });
+    // simple email check
+    const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+    if (!emailOk) return res.status(400).json({ error: 'invalid email' });
+
+    try {
+      const insert = { email: email.toLowerCase(), name: name || null, source: source || null };
+      const { data, error } = await supabase.from('waitlist').insert([insert]).select();
+      if (error) {
+        // If duplicate, return ok (idempotent)
+        if (error.message && error.message.toLowerCase().includes('duplicate') || error.code === '23505') {
+          return res.status(200).json({ message: 'already signed up' });
+        }
+        console.error('Supabase insert error', error);
+        return res.status(500).json({ error: 'db_error', details: error.message || error });
+      }
+      return res.status(200).json({ success: true, entry: data && data[0] ? data[0] : null });
+    } catch (e) {
+      console.error('Waitlist error', e);
+      return res.status(500).json({ error: 'internal' });
+    }
+  });
+
+  const { handleResolve } = require('./resolveHandler');
+
+  app.get('/health', (req, res) => {
+    return res.status(200).json({ ok: true });
+  });
 
   app.post('/api/markets/:id/resolve', async (req, res) => {
     const marketId = req.params.id;
     const { outcome, method = 'creator', reason = '' } = req.body;
     const idempKey = req.get('Idempotency-Key');
 
-    try {
-      const prior = await getIdempotentResponse(idempKey);
-      if (prior) return res.status(200).json(prior);
-
-      const client = await db.getClient();
-      try {
-        await client.query('BEGIN');
-
-        const m = await client.query('SELECT state FROM markets WHERE id = $1 FOR UPDATE', [marketId]);
-        if (m.rowCount === 0) {
-          await client.query('ROLLBACK');
-          return res.status(404).json({ error: 'market not found' });
-        }
-        if (m.rows[0].state !== 'open') {
-          await client.query('ROLLBACK');
-          return res.status(409).json({ error: 'market not open' });
-        }
-
-        const insertRes = await client.query(
-          'INSERT INTO resolutions (market_id, resolver_id, outcome, method, reason) VALUES ($1,$2,$3,$4,$5) RETURNING id, created_at',
-          [marketId, req.user && req.user.id || null, outcome, method, reason]
-        );
-
-        await client.query(
-          'UPDATE markets SET state = $1, resolution = $2 WHERE id = $3',
-          ['resolved', JSON.stringify({ outcome, resolved_at: new Date().toISOString() }), marketId]
-        );
-
-        const preds = await client.query('SELECT user_id, choice FROM predictions WHERE market_id = $1', [marketId]);
-        for (const p of preds.rows) {
-          const delta = (p.choice === outcome) ? 1 : -1;
-          await client.query(
-            'INSERT INTO ledger_entries (user_id, market_id, delta, reason) VALUES ($1,$2,$3,$4)',
-            [p.user_id, marketId, delta, p.choice === outcome ? 'win' : 'loss']
-          );
-        }
-
-        await client.query('COMMIT');
-
-        const response = { market_id: marketId, resolution_id: insertRes.rows[0].id, outcome };
-        await storeIdempotentResponse(idempKey, response);
-        return res.status(200).json(response);
-      } catch (err) {
-        await client.query('ROLLBACK');
-        if (err.code === '23505') {
-          const existing = await db.query('SELECT id, outcome, created_at FROM resolutions WHERE market_id = $1', [marketId]);
-          if (existing.rowCount) {
-            const resp = { market_id: marketId, resolution_id: existing.rows[0].id, outcome: existing.rows[0].outcome };
-            await storeIdempotentResponse(idempKey, resp);
-            return res.status(200).json(resp);
-          }
-        }
-        console.error('Resolve error', err);
-        return res.status(500).json({ error: 'internal' });
-      } finally {
-        client.release();
-      }
-    } catch (e) {
-      console.error('Unexpected error', e);
-      return res.status(500).json({ error: 'internal' });
-    }
+    const result = await handleResolve({ marketId, outcome, method, reason, idempKey, db, getIdempotentResponse, storeIdempotentResponse, userId: req.user && req.user.id });
+    return res.status(result.status).json(result.body);
   });
 
   return app;
