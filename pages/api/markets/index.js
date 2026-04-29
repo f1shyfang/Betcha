@@ -7,6 +7,8 @@ const supabaseAdmin =
   process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
     ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
     : null;
+const DB_UNAVAILABLE_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'EHOSTUNREACH']);
+const isDbUnavailableError = (err) => Boolean(err && DB_UNAVAILABLE_CODES.has(err.code));
 
 async function assertGroupMembership(groupId, userId) {
   if (!supabaseAdmin) throw new Error('supabase_admin_not_configured');
@@ -106,7 +108,7 @@ export default async function handler(req, res) {
       return res.status(200).json(marketRes.rows[0]);
     } catch (err) {
       console.error(err);
-      if (err?.code === 'ECONNREFUSED') {
+      if (isDbUnavailableError(err)) {
         try {
           const result = await createMarketViaSupabase(user, { group_id, title, resolve_by });
           if (result?.forbidden) return res.status(403).json({ error: 'forbidden' });
@@ -156,7 +158,7 @@ export default async function handler(req, res) {
       return res.status(200).json(markets.rows);
     } catch (err) {
       console.error(err);
-      if (err?.code === 'ECONNREFUSED') {
+      if (isDbUnavailableError(err)) {
         try {
           const result = await listMarketsViaSupabase(user.id, group_id);
           if (result?.forbidden) return res.status(403).json({ error: 'forbidden' });

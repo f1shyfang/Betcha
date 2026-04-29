@@ -8,6 +8,8 @@ const supabaseAdmin =
   process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
     ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
     : null;
+const DB_UNAVAILABLE_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'EHOSTUNREACH']);
+const isDbUnavailableError = (err) => Boolean(err && DB_UNAVAILABLE_CODES.has(err.code));
 
 async function loadMarketWithMembership(marketId, userId) {
   if (!supabaseAdmin) throw new Error('supabase_admin_not_configured');
@@ -96,7 +98,7 @@ export default async function handler(req, res) {
       return res.status(200).json(preds.rows);
     } catch (err) {
       console.error('prediction list error', err);
-      if (err?.code === 'ECONNREFUSED') {
+      if (isDbUnavailableError(err)) {
         try {
           const fallback = await listPredictionsViaSupabase(marketId, user.id);
           return res.status(fallback.status).json(fallback.body);
@@ -164,7 +166,7 @@ export default async function handler(req, res) {
       }
     } catch (err) {
       console.error(err);
-      if (err?.code === 'ECONNREFUSED') {
+      if (isDbUnavailableError(err)) {
         try {
           const fallback = await upsertPredictionViaSupabase(marketId, user.id, user.email, choice);
           return res.status(fallback.status).json(fallback.body);

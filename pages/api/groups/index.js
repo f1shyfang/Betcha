@@ -7,6 +7,8 @@ const supabaseAdmin =
   process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
     ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
     : null;
+const DB_UNAVAILABLE_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'EHOSTUNREACH']);
+const isDbUnavailableError = (err) => Boolean(err && DB_UNAVAILABLE_CODES.has(err.code));
 
 async function createGroupViaSupabase(user, name, isPrivate) {
   if (!supabaseAdmin) {
@@ -104,7 +106,7 @@ export default async function handler(req, res) {
       }
     } catch (err) {
       console.error(err);
-      if (err?.code === 'ECONNREFUSED') {
+      if (isDbUnavailableError(err)) {
         try {
           const group = await createGroupViaSupabase(user, name, is_private);
           return res.status(200).json(group);
@@ -133,7 +135,7 @@ export default async function handler(req, res) {
       return res.status(200).json(groups.rows);
     } catch (err) {
       console.error(err);
-      if (err?.code === 'ECONNREFUSED') {
+      if (isDbUnavailableError(err)) {
         try {
           const groups = await listGroupsViaSupabase(user.id);
           return res.status(200).json(groups);
