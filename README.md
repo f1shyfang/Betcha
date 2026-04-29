@@ -1,6 +1,6 @@
 # Betcha
 
-## Run both frontend + backend
+## Monolithic Next.js full-stack app
 
 From the repository root:
 
@@ -9,6 +9,28 @@ npm install
 npm run dev
 ```
 
-This command loads variables from `.env.local`, starts the backend on `PORT` (default `3001`), and starts the Next.js frontend on `3000`.
+This runs a single Next.js app that serves both UI pages and API routes.
 
-If `3000` is already in use, set `FRONTEND_PORT` in `.env.local` and rerun `npm run dev`.
+## Environment
+
+Copy `.env.example` to `.env.local` and set:
+
+- `DATABASE_URL` for Postgres
+- `SUPABASE_URL` and `SUPABASE_ANON_KEY` for server-side Supabase access
+- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` for browser auth
+
+`NEXT_PUBLIC_API_URL` is optional and usually left blank to use same-origin `/api/*`.
+
+## Scripts
+
+- `npm run dev` — start full-stack app locally
+- `npm run build` — production build
+- `npm run start` — run production server
+- `npm run migrate` — apply SQL schema in `server/migrations/001_create_tables.sql`
+- `npm test` — resolve flow test
+
+## API endpoints
+
+- `POST /api/waitlist`
+- `POST /api/markets/:id/resolve`
+- `GET /api/health`
