@@ -51,8 +51,25 @@ export default async function handler(req, res) {
       scores.set(row.user_id, (scores.get(row.user_id) || 0) + (row.delta || 0));
     }
 
+    const scoredUserIds = [...scores.keys()];
+    if (scoredUserIds.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    const { data: userRows, error: userErr } = await supabaseAdmin
+      .from('users')
+      .select('id,email,display_name')
+      .in('id', scoredUserIds);
+    if (userErr) throw userErr;
+
+    const userMap = new Map((userRows || []).map((u) => [u.id, u]));
+
     const leaderboard = [...scores.entries()]
-      .map(([userId, score]) => ({ user_id: userId, score }))
+      .map(([userId, score]) => {
+        const u = userMap.get(userId);
+        const display_name = u?.display_name ?? (u?.email ? u.email.split('@')[0] : userId);
+        return { user_id: userId, display_name, score };
+      })
       .sort((left, right) => right.score - left.score);
 
     return res.status(200).json(leaderboard);

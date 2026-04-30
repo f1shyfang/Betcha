@@ -9,6 +9,7 @@ export default function SignupPage() {
   const [session, setSession] = useState(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -42,11 +43,26 @@ export default function SignupPage() {
     setMessage('');
 
     try {
-      const { error: signUpError } = await supabase.auth.signUp({
+      const { data: { user, session: newSession }, error: signUpError } = await supabase.auth.signUp({
         email: email.trim(),
         password,
       });
       if (signUpError) throw signUpError;
+
+      // If we got a session immediately (auto-confirm enabled), upsert display_name
+      if (newSession && user) {
+        try {
+          await fetch('/api/users/profile', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${newSession.access_token}`,
+            },
+            body: JSON.stringify({ display_name: displayName.trim() || null }),
+          });
+        } catch (_) {}
+      }
+
       setMessage('Account created! Redirecting to login...');
       setPassword('');
       const redirectParam = router.query.redirect ? `&redirect=${encodeURIComponent(router.query.redirect)}` : '';
@@ -111,6 +127,18 @@ export default function SignupPage() {
                   placeholder="At least 6 characters"
                   minLength={6}
                   required
+                />
+              </label>
+            </div>
+
+            <div className="form-row">
+              <label className="label">
+                Display Name <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(optional)</span>
+                <input
+                  type="text"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="How others will see you"
                 />
               </label>
             </div>

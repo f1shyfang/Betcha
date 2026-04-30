@@ -1,18 +1,9 @@
 const { getUserFromRequest } = require('../../../server/supabaseAuth');
 const { applyCors } = require('../../../server/cors');
-const { createClient } = require('@supabase/supabase-js');
-
-const supabaseAdmin =
-  process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
-    ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-    : null;
-const DB_UNAVAILABLE_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'EHOSTUNREACH']);
-const isDbUnavailableError = (err) => Boolean(err && DB_UNAVAILABLE_CODES.has(err.code));
+const { requireSupabaseAdmin } = require('../../../server/supabaseAdmin');
 
 async function createGroupViaSupabase(user, name, isPrivate) {
-  if (!supabaseAdmin) {
-    throw new Error('supabase_admin_not_configured');
-  }
+  const supabaseAdmin = requireSupabaseAdmin();
 
   const { error: userErr } = await supabaseAdmin
     .from('users')
@@ -35,7 +26,6 @@ async function createGroupViaSupabase(user, name, isPrivate) {
     .from('group_members')
     .insert({ group_id: group.id, user_id: user.id, role: 'admin' });
   if (memberErr) {
-    // best-effort cleanup to avoid orphan groups when membership insert fails
     await supabaseAdmin.from('groups').delete().eq('id', group.id);
     throw memberErr;
   }
@@ -44,9 +34,7 @@ async function createGroupViaSupabase(user, name, isPrivate) {
 }
 
 async function listGroupsViaSupabase(userId) {
-  if (!supabaseAdmin) {
-    throw new Error('supabase_admin_not_configured');
-  }
+  const supabaseAdmin = requireSupabaseAdmin();
 
   const { data, error } = await supabaseAdmin
     .from('group_members')

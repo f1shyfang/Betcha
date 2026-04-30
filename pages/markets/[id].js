@@ -9,12 +9,14 @@ export default function MarketDetail() {
   const router = useRouter();
   const { id } = router.query;
   const [market, setMarket] = useState(null);
+  const [predictions, setPredictions] = useState([]);
   const [yesCount, setYesCount] = useState(0);
   const [noCount, setNoCount] = useState(0);
   const [myPrediction, setMyPrediction] = useState(null); // true | false | null
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -30,13 +32,11 @@ export default function MarketDetail() {
       if (!session) return router.push('/');
       setCurrentUserId(session.user.id);
 
-      // For simplicity, just refetch all from group and find it, or we could add a single GET /api/markets/:id
       const res = await fetch(`/api/markets`, {
         headers: { Authorization: `Bearer ${session.access_token}` }
       });
       if (res.ok) {
         const data = await res.json();
-        // Route params are strings in Next.js; normalize IDs before comparing.
         const found = data.find((m) => String(m.id) === String(id));
         setMarket(found);
       }
@@ -57,13 +57,14 @@ export default function MarketDetail() {
       });
       if (!res.ok) return;
 
-      const predictions = await res.json();
-      const yes = predictions.filter((p) => p.choice === true).length;
-      const no = predictions.filter((p) => p.choice === false).length;
+      const preds = await res.json();
+      const yes = preds.filter((p) => p.choice === true).length;
+      const no = preds.filter((p) => p.choice === false).length;
       setYesCount(yes);
       setNoCount(no);
+      setPredictions(preds);
       setLastUpdatedAt(new Date());
-      const mine = predictions.find((p) => p.user_id === session.user.id);
+      const mine = preds.find((p) => p.user_id === session.user.id);
       setMyPrediction(mine !== undefined ? mine.choice : null);
     } catch (err) {
       console.error(err);
@@ -75,7 +76,7 @@ export default function MarketDetail() {
     const idempKey = `pred-${id}-${session.user.id}-${Date.now()}`;
     await fetch(`/api/markets/${id}/predictions`, {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.access_token}`,
         'idempotency-key': idempKey
@@ -94,12 +95,55 @@ export default function MarketDetail() {
     }
   };
 
-  if (loading) return <div className="page">Loading...</div>;
+  const handleShare = async () => {
+    const outcome = market.resolution.outcome;
+    const text = `Outcome: ${outcome ? 'YES' : 'NO'} — ${market.title}`;
+    try {
+      await navigator.share({ title: market.title, text });
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="page">
+        <header className="topbar">
+          <div className="brand-lockup">
+            <span className="brand-mark">B</span>
+            <div className="brand-name">Betcha</div>
+          </div>
+        </header>
+        <main>
+          <div className="skeleton-shimmer" style={{ height: '20px', width: '120px', borderRadius: '6px', marginBottom: '16px' }} />
+          <div className="skeleton-shimmer" style={{ height: '40px', width: '80%', borderRadius: '8px', marginBottom: '24px' }} />
+          <div className="skeleton-shimmer" style={{ height: '80px', borderRadius: '12px', marginBottom: '24px' }} />
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <div className="skeleton-shimmer" style={{ height: '56px', flex: 1, borderRadius: '12px' }} />
+            <div className="skeleton-shimmer" style={{ height: '56px', flex: 1, borderRadius: '12px' }} />
+          </div>
+        </main>
+      </div>
+    );
+  }
   if (!market) return <div className="page">Market not found or unauthorized.</div>;
 
   const total = yesCount + noCount;
   const yesPct = total > 0 ? Math.round((yesCount / total) * 100) : 50;
   const noPct = 100 - yesPct;
+
+  const isResolved = market.state === 'resolved' && market.resolution;
+  const outcomeValue = isResolved ? market.resolution.outcome : null;
+  const winners = isResolved
+    ? predictions.filter((p) => p.choice === outcomeValue)
+    : [];
+  const visibleWinners = winners.slice(0, 10);
+  const extraWinners = winners.length - visibleWinners.length;
+  const myCorrect = isResolved && myPrediction !== null ? myPrediction === outcomeValue : null;
 
   return (
     <div className="page">
@@ -187,12 +231,74 @@ export default function MarketDetail() {
           </section>
         )}
 
-        {market.state === 'resolved' && market.resolution && (
+        {isResolved && (
           <section style={{ marginTop: '24px' }}>
             <div className="resolution-banner">
-              <div className="resolution-outcome">
-                Outcome: {market.resolution.outcome ? 'YES' : 'NO'}
+              <div style={{ fontSize: '28px', fontWeight: 700, fontFamily: "'Cabinet Grotesk', sans-serif", marginBottom: '12px' }}>
+                OUTCOME: {outcomeValue ? 'YES' : 'NO'}
               </div>
+
+              {myCorrect !== null && (
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 14px',
+                  borderRadius: '999px',
+                  fontSize: '15px',
+                  fontWeight: 700,
+                  background: myCorrect ? 'rgba(0,194,168,0.15)' : 'rgba(255,90,95,0.15)',
+                  color: myCorrect ? '#0d6b60' : '#8c2727',
+                  border: `1px solid ${myCorrect ? 'rgba(0,194,168,0.3)' : 'rgba(255,90,95,0.3)'}`,
+                  marginBottom: '16px',
+                }}>
+                  {myCorrect ? '+1' : '−1'}
+                </div>
+              )}
+
+              {visibleWinners.length > 0 && (
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Winners
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {visibleWinners.map((p) => (
+                      <span key={p.user_id} style={{
+                        padding: '4px 10px',
+                        borderRadius: '999px',
+                        background: 'rgba(0,194,168,0.1)',
+                        color: '#0d6b60',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        border: '1px solid rgba(0,194,168,0.2)',
+                      }}>
+                        {p.display_name || p.user_id}
+                      </span>
+                    ))}
+                    {extraWinners > 0 && (
+                      <Link href={`/groups/${market.group_id}`} style={{
+                        padding: '4px 10px',
+                        borderRadius: '999px',
+                        background: 'rgba(18,20,23,0.06)',
+                        color: 'var(--muted)',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        textDecoration: 'none',
+                      }}>
+                        and {extraWinners} more →
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <button
+                className="button button-secondary"
+                onClick={handleShare}
+                style={{ marginTop: '4px' }}
+              >
+                {copied ? 'Copied!' : 'Share Result'}
+              </button>
             </div>
           </section>
         )}

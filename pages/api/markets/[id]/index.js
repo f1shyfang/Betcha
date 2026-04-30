@@ -1,5 +1,6 @@
 const { applyCors } = require('../../../../server/cors');
 const { requireSupabaseAdmin } = require('../../../../server/supabaseAdmin');
+const { getUserFromRequest } = require('../../../../server/supabaseAuth');
 
 async function handler(req, res) {
   if (applyCors(req, res)) return;
@@ -7,6 +8,9 @@ async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'method not allowed' });
   }
+
+  const user = await getUserFromRequest(req);
+  if (!user) return res.status(401).json({ error: 'unauthorized' });
 
   const marketId = req.query.id;
 
@@ -23,6 +27,17 @@ async function handler(req, res) {
     const market = marketRows?.[0];
     if (!market) {
       return res.status(404).json({ error: 'market not found' });
+    }
+
+    const { data: memberRows, error: memberErr } = await supabaseAdmin
+      .from('group_members')
+      .select('role')
+      .eq('group_id', market.group_id)
+      .eq('user_id', user.id)
+      .limit(1);
+    if (memberErr) throw memberErr;
+    if (!memberRows || memberRows.length === 0) {
+      return res.status(403).json({ error: 'forbidden' });
     }
 
     const { data: predictionRows, error: predictionErr } = await supabaseAdmin

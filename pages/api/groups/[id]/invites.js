@@ -6,7 +6,7 @@ const { requireSupabaseAdmin } = require('../../../../server/supabaseAdmin');
 export default async function handler(req, res) {
   if (applyCors(req, res)) return;
 
-  if (req.method !== 'POST') {
+  if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ error: 'method not allowed' });
   }
 
@@ -30,9 +30,21 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'forbidden' });
     }
 
+    if (req.method === 'GET') {
+      const { data: inviteRows, error: inviteErr } = await supabaseAdmin
+        .from('invites')
+        .select('token,inviter_id,expires_at,used_by_user_id')
+        .eq('group_id', groupId)
+        .gt('expires_at', new Date().toISOString())
+        .is('used_by_user_id', null);
+      if (inviteErr) throw inviteErr;
+      return res.status(200).json(inviteRows || []);
+    }
+
+    // POST
     const token = crypto.randomBytes(16).toString('hex');
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+    expiresAt.setDate(expiresAt.getDate() + 7);
 
     const { data: invite, error: inviteErr } = await supabaseAdmin
       .from('invites')

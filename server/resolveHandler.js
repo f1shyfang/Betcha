@@ -30,64 +30,22 @@ const handleResolve = async (deps) => {
     if (memberErr) throw memberErr;
     if (!memberRows || memberRows.length === 0) return { status: 403, body: { error: 'forbidden' } };
 
-    const { data: resolutionRows, error: resolutionErr } = await supabase
-      .from('resolutions')
-      .insert({
-        market_id: marketId,
-        resolver_id: userId || null,
-        outcome,
-        method,
-        reason,
-      })
-      .select('id,created_at')
-      .limit(1);
+    const { error: rpcError } = await supabase.rpc('market_resolve_with_ledger', {
+      p_market_id: marketId,
+      p_resolver_id: userId || null,
+      p_outcome: outcome,
+      p_method: method,
+      p_reason: reason,
+    });
 
-    if (resolutionErr) {
-      if (resolutionErr.code === '23505') {
-        const { data: existingRows, error: existingErr } = await supabase
-          .from('resolutions')
-          .select('id,outcome,created_at')
-          .eq('market_id', marketId)
-          .limit(1);
-        if (existingErr) throw existingErr;
-        const existing = existingRows?.[0];
-        if (existing) {
-          const response = { market_id: marketId, resolution_id: existing.id, outcome: existing.outcome };
-          await storeIdempotentResponse(idempKey, response);
-          return { status: 200, body: response };
-        }
+    if (rpcError) {
+      if (rpcError.code === '42883') {
+        return { status: 503, body: { error: 'migration_pending', hint: 'apply 003_market_resolve_rpc.sql' } };
       }
-      throw resolutionErr;
+      throw rpcError;
     }
 
-    const resolution = resolutionRows?.[0];
-    if (!resolution) throw new Error('resolution_insert_failed');
-
-    const { error: marketUpdateErr } = await supabase
-      .from('markets')
-      .update({ state: 'resolved', resolution: { outcome, resolved_at: new Date().toISOString() } })
-      .eq('id', marketId);
-    if (marketUpdateErr) throw marketUpdateErr;
-
-    const { data: predictionRows, error: predictionErr } = await supabase
-      .from('predictions')
-      .select('user_id,choice')
-      .eq('market_id', marketId);
-    if (predictionErr) throw predictionErr;
-
-    const ledgerEntries = (predictionRows || []).map((prediction) => ({
-      user_id: prediction.user_id,
-      market_id: marketId,
-      delta: prediction.choice === outcome ? 1 : -1,
-      reason: prediction.choice === outcome ? 'win' : 'loss',
-    }));
-
-    if (ledgerEntries.length > 0) {
-      const { error: ledgerErr } = await supabase.from('ledger_entries').insert(ledgerEntries);
-      if (ledgerErr) throw ledgerErr;
-    }
-
-    const response = { market_id: marketId, resolution_id: resolution.id, outcome };
+    const response = { market_id: marketId, outcome };
     await storeIdempotentResponse(idempKey, response);
     return { status: 200, body: response };
   } catch (e) {

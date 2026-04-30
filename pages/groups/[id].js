@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import supabase from '../../lib/supabase';
 import Head from 'next/head';
 import Link from 'next/link';
+import { createMarket as createMarketApi } from '../../lib/api';
 
 export default function GroupDetail() {
   const router = useRouter();
@@ -13,6 +14,7 @@ export default function GroupDetail() {
   const [loading, setLoading] = useState(true);
   const [inviteToken, setInviteToken] = useState(null);
   const [newMarketTitle, setNewMarketTitle] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -79,18 +81,15 @@ export default function GroupDetail() {
 
   const createMarket = async (e) => {
     e.preventDefault();
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch('/api/markets', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}` 
-      },
-      body: JSON.stringify({ group_id: id, title: newMarketTitle })
-    });
-    if (res.ok) {
+    setSubmitting(true);
+    try {
+      await createMarketApi({ title: newMarketTitle, groupId: id });
       setNewMarketTitle('');
       fetchGroup();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -100,7 +99,32 @@ export default function GroupDetail() {
     navigator.clipboard.writeText(url).catch(() => {});
   };
 
-  if (loading) return <div className="page">Loading...</div>;
+  if (loading) {
+    return (
+      <div className="page">
+        <header className="topbar">
+          <div className="brand-lockup">
+            <span className="brand-mark">B</span>
+            <div>
+              <div className="brand-name">Betcha</div>
+            </div>
+          </div>
+        </header>
+        <main>
+          <div className="skeleton-shimmer" style={{ height: '32px', width: '200px', borderRadius: '8px', marginBottom: '24px' }} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px', marginBottom: '32px' }}>
+            {[1, 2, 3].map((n) => (
+              <div key={n} className="skeleton-shimmer" style={{ height: '120px', borderRadius: '12px' }} />
+            ))}
+          </div>
+          <div className="skeleton-shimmer" style={{ height: '24px', width: '160px', borderRadius: '8px', marginBottom: '12px' }} />
+          {[1, 2].map((n) => (
+            <div key={n} className="skeleton-shimmer" style={{ height: '44px', borderRadius: '8px', marginBottom: '8px' }} />
+          ))}
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="page">
@@ -203,7 +227,9 @@ export default function GroupDetail() {
               />
             </label>
           </div>
-          <button type="submit" className="button">Create Market</button>
+          <button type="submit" className="button" disabled={submitting}>
+            {submitting ? 'Creating...' : 'Create Market'}
+          </button>
         </form>
       </main>
 

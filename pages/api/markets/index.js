@@ -1,6 +1,7 @@
 const { getUserFromRequest } = require('../../../server/supabaseAuth');
 const { applyCors } = require('../../../server/cors');
 const { requireSupabaseAdmin } = require('../../../server/supabaseAdmin');
+const { getIdempotentResponse, storeIdempotentResponse } = require('../../../server/idempotency');
 
 async function assertGroupMembership(groupId, userId) {
   const supabaseAdmin = requireSupabaseAdmin();
@@ -68,8 +69,16 @@ export default async function handler(req, res) {
     const { group_id, title, resolve_by } = req.body;
     if (!group_id || !title) return res.status(400).json({ error: 'group_id and title are required' });
 
+    const idempKey = req.headers['idempotency-key'];
+
     try {
+      if (idempKey) {
+        const prior = await getIdempotentResponse(idempKey);
+        if (prior) return res.status(200).json(prior);
+      }
+
       const result = await createMarketViaSupabase(user, { group_id, title, resolve_by });
+      if (idempKey) await storeIdempotentResponse(idempKey, result.market);
       return res.status(200).json(result.market);
     } catch (err) {
       console.error(err);

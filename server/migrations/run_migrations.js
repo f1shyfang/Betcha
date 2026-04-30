@@ -3,15 +3,21 @@ const path = require('path');
 const { Client } = require('pg');
 
 async function run() {
-  const sqlPath1 = path.join(__dirname, '001_create_tables.sql');
-  const sql1 = fs.readFileSync(sqlPath1, 'utf8');
-  const sqlPath2 = path.join(__dirname, '002_rls.sql');
-  const sql2 = fs.readFileSync(sqlPath2, 'utf8');
+  const migrationsDir = path.join(__dirname, '../../supabase/migrations');
+  const migrationSourceDir = fs.existsSync(migrationsDir) ? migrationsDir : __dirname;
   const client = new Client({ connectionString: process.env.DATABASE_URL || 'postgres://localhost:5432/betcha_dev' });
+  const migrationFiles = fs
+    .readdirSync(migrationSourceDir)
+    .filter((file) => file.endsWith('.sql'))
+    .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+
   await client.connect();
   try {
-    await client.query(sql1);
-    await client.query(sql2);
+    for (const fileName of migrationFiles) {
+      const sql = fs.readFileSync(path.join(migrationSourceDir, fileName), 'utf8');
+      await client.query(sql);
+      console.log(`Applied migration ${fileName}`);
+    }
     console.log('Migrations applied');
   } catch (err) {
     console.error('Migration error:', err);

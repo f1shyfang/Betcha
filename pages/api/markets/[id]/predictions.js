@@ -40,7 +40,27 @@ async function listPredictionsViaSupabase(marketId, userId) {
     .order('created_at', { ascending: false });
   if (error) throw error;
 
-  return { status: 200, body: data || [] };
+  const rows = data || [];
+  const userIds = [...new Set(rows.map((p) => p.user_id))];
+  let userMap = new Map();
+  if (userIds.length > 0) {
+    const { data: userRows, error: userErr } = await supabaseAdmin
+      .from('users')
+      .select('id,email,display_name')
+      .in('id', userIds);
+    if (userErr) throw userErr;
+    userMap = new Map((userRows || []).map((u) => [u.id, u]));
+  }
+
+  const enriched = rows.map((p) => {
+    const u = userMap.get(p.user_id);
+    return {
+      ...p,
+      display_name: u?.display_name ?? (u?.email ? u.email.split('@')[0] : p.user_id),
+    };
+  });
+
+  return { status: 200, body: enriched };
 }
 
 async function upsertPredictionViaSupabase(marketId, userId, userEmail, choice) {

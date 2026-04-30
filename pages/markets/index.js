@@ -103,7 +103,26 @@ export default function MarketsIndex() {
     }
   };
 
-  if (loading) return <div className="page">Loading...</div>;
+  if (loading) {
+    return (
+      <div className="page">
+        <header className="topbar">
+          <div className="brand-lockup">
+            <span className="brand-mark">B</span>
+            <div className="brand-name">Betcha</div>
+          </div>
+        </header>
+        <main>
+          <div className="skeleton-shimmer" style={{ height: '32px', width: '160px', borderRadius: '8px', marginBottom: '24px' }} />
+          <div className="markets-grid">
+            {[1, 2, 3].map((n) => (
+              <div key={n} className="skeleton-shimmer" style={{ height: '120px', borderRadius: '12px' }} />
+            ))}
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="page">
