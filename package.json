@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "migrate": "node server/migrations/run_migrations.js",
-    "test": "node test/resolve.e2e.test.js"
+    "test": "node test/resolve.e2e.test.js",
+    "test:db": "node test/database-url.test.js",
+    "test:dburl": "node test/database-url.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.0.0",
