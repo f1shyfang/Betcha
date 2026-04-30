@@ -45,7 +45,26 @@ const handleResolve = async (deps) => {
       throw rpcError;
     }
 
-    const response = { market_id: marketId, outcome };
+    const { data: settlementRows, error: settlementErr } = await supabase
+      .from('ledger_entries')
+      .select('user_id,delta,reason')
+      .eq('market_id', marketId);
+    if (settlementErr) throw settlementErr;
+
+    const myBreakdown = {};
+    let myDelta = 0;
+    for (const row of settlementRows || []) {
+      if (row.user_id !== userId) continue;
+      myBreakdown[row.reason] = (myBreakdown[row.reason] || 0) + (row.delta || 0);
+      myDelta += row.delta || 0;
+    }
+
+    const response = {
+      market_id: marketId,
+      outcome,
+      my_delta: myDelta,
+      my_breakdown: myBreakdown,
+    };
     await storeIdempotentResponse(idempKey, response);
     return { status: 200, body: response };
   } catch (e) {

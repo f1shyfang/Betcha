@@ -39,23 +39,37 @@ export default function Home() {
     <main className="page">
       <header className="topbar" aria-label="Primary navigation">
         <div className="brand-lockup">
-          <span className="brand-mark">B</span>
           <div>
             <div className="brand-name">Betcha</div>
             <div className="brand-tag">Social prediction markets for friends</div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <div className="topbar-actions">
           <a className="topbar-link" href="/login">
-            Login
+            <span className="topbar-link-icon" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                <polyline points="10 17 15 12 10 7" />
+                <line x1="15" y1="12" x2="3" y2="12" />
+              </svg>
+            </span>
+            <span>Login</span>
           </a>
           <a className="topbar-link" href="/signup">
-            Sign up
+            <span className="topbar-link-icon" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9" cy="8" r="4" />
+                <path d="M17 11v6" />
+                <path d="M14 14h6" />
+                <path d="M3 21a6 6 0 0 1 12 0" />
+              </svg>
+            </span>
+            <span>Sign up</span>
           </a>
         </div>
       </header>
 
-      <section className="hero">
+      <section className="hero landing-hero">
         <div className="hero-copy">
           <div className="eyebrow">Invite-only beta</div>
           <h1>Make markets on anything. Keep it fun. Keep it real.</h1>
@@ -64,21 +78,6 @@ export default function Home() {
             check. Build a market, invite your friends, watch the odds move, and
             resolve the result together.
           </p>
-
-          <div className="hero-stats" aria-label="Product highlights">
-            <div>
-              <strong>Private by default</strong>
-              <span>Share one link with your group.</span>
-            </div>
-            <div>
-              <strong>Score-only v1</strong>
-              <span>No money custody. Less friction.</span>
-            </div>
-            <div>
-              <strong>Made for rituals</strong>
-              <span>Chores, habits, game night, and more.</span>
-            </div>
-          </div>
 
           <form id="join" className="form" onSubmit={submit}>
             <div className="form-row">

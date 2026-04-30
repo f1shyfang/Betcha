@@ -59,12 +59,21 @@ async function setup() {
   await rest('POST', '/group_members', { group_id: groupId, user_id: TEST_USER_2, role: 'member' });
 
   // Step 3: Create market
-  const [market] = await rest('POST', '/markets', { group_id: groupId, creator_id: TEST_USER_1, title: 'Test market', state: 'open' });
+  const [market] = await rest('POST', '/markets', {
+    group_id: groupId,
+    creator_id: TEST_USER_1,
+    title: 'Test market',
+    state: 'open',
+    resolve_by: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+  });
   marketId = market.id;
 
-  // Step 4: Add 2 predictions (user1=YES, user2=NO)
-  await rest('POST', '/predictions', { market_id: marketId, user_id: TEST_USER_1, choice: true });
-  await rest('POST', '/predictions', { market_id: marketId, user_id: TEST_USER_2, choice: false });
+  // Step 4: Add 2 predictions (user1=YES stake=100, user2=NO stake=50)
+  await rest('POST', '/predictions', { market_id: marketId, user_id: TEST_USER_1, choice: true, stake_points: 100 });
+  await rest('POST', '/predictions', { market_id: marketId, user_id: TEST_USER_2, choice: false, stake_points: 50 });
+  // Debited at bet time
+  await rest('POST', '/ledger_entries', { user_id: TEST_USER_1, market_id: marketId, delta: -100, reason: 'wager_stake' });
+  await rest('POST', '/ledger_entries', { user_id: TEST_USER_2, market_id: marketId, delta: -50, reason: 'wager_stake' });
 }
 
 async function teardown() {
@@ -128,11 +137,11 @@ async function testResolveHappyPath() {
   assert(markets[0]?.resolution?.outcome === true, 'market.resolution.outcome = true');
 
   const ledger = await restGet(`/ledger_entries?market_id=eq.${marketId}`);
-  assert(ledger.length === 2, `2 ledger rows (got ${ledger.length})`);
-  const user1Row = ledger.find((r) => r.user_id === TEST_USER_1);
-  const user2Row = ledger.find((r) => r.user_id === TEST_USER_2);
-  assert(user1Row?.delta === 1, 'user1 (YES) gets +1');
-  assert(user2Row?.delta === -1, 'user2 (NO) gets -1');
+  assert(ledger.length >= 3, `ledger rows exist (got ${ledger.length})`);
+  const user1Total = ledger.filter((r) => r.user_id === TEST_USER_1).reduce((sum, r) => sum + (r.delta || 0), 0);
+  const user2Total = ledger.filter((r) => r.user_id === TEST_USER_2).reduce((sum, r) => sum + (r.delta || 0), 0);
+  assert(user1Total === 100, `user1 total is +100 (got ${user1Total})`);
+  assert(user2Total === -50, `user2 total is -50 (got ${user2Total})`);
 
   const auditRows = await restGet(`/audit_logs?actor_id=eq.${TEST_USER_1}&action=eq.market_resolved`);
   assert(auditRows.length >= 1, '1 audit_log row created');
@@ -156,7 +165,8 @@ async function testIdempotency(idempKey) {
   assert(result.body.outcome === true, 'body.outcome still true');
 
   const ledger = await restGet(`/ledger_entries?market_id=eq.${marketId}`);
-  assert(ledger.length === 2, `still 2 ledger rows — no double write (got ${ledger.length})`);
+  const payoutRows = ledger.filter((row) => row.reason === 'wager_win_payout');
+  assert(payoutRows.length === 1, `single payout row only (got ${payoutRows.length})`);
 }
 
 async function testAuthGuard() {

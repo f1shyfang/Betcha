@@ -46,9 +46,47 @@ async function handler(req, res) {
       .eq('market_id', marketId);
     if (predictionErr) throw predictionErr;
 
+    const { data: mySettlementRows, error: settlementErr } = await supabaseAdmin
+      .from('ledger_entries')
+      .select('delta,reason,created_at')
+      .eq('market_id', marketId)
+      .eq('user_id', user.id);
+    if (settlementErr) throw settlementErr;
+
+    const { data: myPredictionRow, error: myPredictionErr } = await supabaseAdmin
+      .from('predictions')
+      .select('stake_points,choice,created_at')
+      .eq('market_id', marketId)
+      .eq('user_id', user.id)
+      .limit(1)
+      .single();
+    if (myPredictionErr && myPredictionErr.code !== 'PGRST116') throw myPredictionErr;
+
+    const { data: userRow, error: userErr } = await supabaseAdmin
+      .from('users')
+      .select('starting_points')
+      .eq('id', user.id)
+      .limit(1)
+      .single();
+    if (userErr) throw userErr;
+
+    const { data: allLedgerRows, error: allLedgerErr } = await supabaseAdmin
+      .from('ledger_entries')
+      .select('delta')
+      .eq('user_id', user.id);
+    if (allLedgerErr) throw allLedgerErr;
+
     const predictionCount = (predictionRows || []).length;
     const yesCount = (predictionRows || []).filter((row) => row.choice === true).length;
     const noCount = (predictionRows || []).filter((row) => row.choice === false).length;
+
+    const settlementBreakdown = {};
+    let settlementDelta = 0;
+    for (const row of mySettlementRows || []) {
+      settlementBreakdown[row.reason] = (settlementBreakdown[row.reason] || 0) + (row.delta || 0);
+      settlementDelta += row.delta || 0;
+    }
+    const userBalance = (userRow?.starting_points ?? 2000) + (allLedgerRows || []).reduce((sum, row) => sum + (row.delta || 0), 0);
 
     return res.status(200).json({
       market: {
@@ -56,6 +94,12 @@ async function handler(req, res) {
         prediction_count: predictionCount,
         yes_count: yesCount,
         no_count: noCount,
+        my_settlement: {
+          total_delta: settlementDelta,
+          breakdown: settlementBreakdown,
+        },
+        my_prediction: myPredictionRow || null,
+        my_balance: userBalance,
       },
     });
   } catch (e) {

@@ -173,7 +173,6 @@ export default function MarketsIndex() {
                     value={selectedGroupId}
                     onChange={(e) => setSelectedGroupId(e.target.value)}
                     required
-                    style={{ minHeight: '48px' }}
                   >
                     {groups.map((group) => (
                       <option key={group.id} value={group.id}>

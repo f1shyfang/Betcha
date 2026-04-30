@@ -17,6 +17,7 @@ export default function MarketDetail() {
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [stakePoints, setStakePoints] = useState(100);
 
   useEffect(() => {
     if (!id) return;
@@ -32,13 +33,12 @@ export default function MarketDetail() {
       if (!session) return router.push('/');
       setCurrentUserId(session.user.id);
 
-      const res = await fetch(`/api/markets`, {
+      const res = await fetch(`/api/markets/${id}`, {
         headers: { Authorization: `Bearer ${session.access_token}` }
       });
       if (res.ok) {
         const data = await res.json();
-        const found = data.find((m) => String(m.id) === String(id));
-        setMarket(found);
+        setMarket(data.market || null);
       }
       setLoading(false);
     } catch (err) {
@@ -74,15 +74,20 @@ export default function MarketDetail() {
   const placePrediction = async (choice) => {
     const { data: { session } } = await supabase.auth.getSession();
     const idempKey = `pred-${id}-${session.user.id}-${Date.now()}`;
-    await fetch(`/api/markets/${id}/predictions`, {
+    const res = await fetch(`/api/markets/${id}/predictions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.access_token}`,
         'idempotency-key': idempKey
       },
-      body: JSON.stringify({ choice })
+      body: JSON.stringify({ choice, stake_points: stakePoints })
     });
+    if (!res.ok) {
+      const payload = await res.json().catch(() => ({}));
+      alert(payload.error || 'Failed to place prediction');
+      return;
+    }
     router.reload();
   };
 
@@ -144,6 +149,10 @@ export default function MarketDetail() {
   const visibleWinners = winners.slice(0, 10);
   const extraWinners = winners.length - visibleWinners.length;
   const myCorrect = isResolved && myPrediction !== null ? myPrediction === outcomeValue : null;
+  const settlement = market.my_settlement || { total_delta: 0, breakdown: {} };
+  const settlementEntries = Object.entries(settlement.breakdown || {});
+  const myBalance = market.my_balance ?? 0;
+  const myStake = market.my_prediction?.stake_points ?? 0;
 
   return (
     <div className="page">
@@ -201,15 +210,29 @@ export default function MarketDetail() {
                 border: `1px solid ${myPrediction ? 'rgba(0,194,168,0.25)' : 'rgba(255,90,95,0.25)'}`,
                 width: 'fit-content',
               }}>
-                Your prediction: {myPrediction ? 'YES ✓' : 'NO ✓'}
+                Your prediction: {myPrediction ? 'YES ✓' : 'NO ✓'} {myStake > 0 ? `· Stake ${myStake}` : ''}
               </div>
             )}
+            <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
+              Balance: {myBalance} points
+            </div>
           </div>
         </section>
 
         {market.state === 'open' && myPrediction === null && (
           <section className="prediction-section" style={{ marginTop: '24px' }}>
             <h2 className="section-title">Place Your Prediction</h2>
+            <label className="label" style={{ marginBottom: '10px' }}>
+              Stake points
+              <input
+                type="number"
+                min="1"
+                max={Math.max(1, myBalance)}
+                step="1"
+                value={stakePoints}
+                onChange={(e) => setStakePoints(Number(e.target.value || 0))}
+              />
+            </label>
             <div className="prediction-buttons">
               <button className="button button-predict button-predict-yes" onClick={() => placePrediction(true)}>
                 YES
@@ -252,7 +275,24 @@ export default function MarketDetail() {
                   border: `1px solid ${myCorrect ? 'rgba(0,194,168,0.3)' : 'rgba(255,90,95,0.3)'}`,
                   marginBottom: '16px',
                 }}>
-                  {myCorrect ? '+1' : '−1'}
+                  {settlement.total_delta > 0 ? '+' : ''}{settlement.total_delta} points
+                </div>
+              )}
+
+              {settlementEntries.length > 0 && (
+                <div style={{ marginBottom: '16px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {settlementEntries.map(([reason, delta]) => (
+                    <span key={reason} style={{
+                      padding: '4px 10px',
+                      borderRadius: '999px',
+                      background: 'rgba(18,20,23,0.06)',
+                      color: 'var(--text)',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                    }}>
+                      {reason.replace('_', ' ')}: {delta > 0 ? '+' : ''}{delta}
+                    </span>
+                  ))}
                 </div>
               )}
 

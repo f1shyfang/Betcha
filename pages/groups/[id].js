@@ -193,6 +193,9 @@ export default function GroupDetail() {
         <section className="leaderboard-section" style={{ marginBottom: '32px' }}>
           <div className="dashboard-header" style={{ marginBottom: '16px' }}>
             <h2 className="section-title" style={{ color: '#f8fafb' }}>Leaderboard</h2>
+            <span title="Scoring: correct +5, incorrect -2, early bonus +1, creator stewardship +2 on-time" style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px' }}>
+              Scoring rules
+            </span>
           </div>
           {leaderboard.length === 0 ? (
             <p style={{ color: 'rgba(255,255,255,0.5)', margin: 0 }}>No scores yet — resolve a market to get started.</p>
@@ -202,6 +205,9 @@ export default function GroupDetail() {
                 <li key={entry.user_id} className={`leaderboard-row ${entry.score > 0 ? 'leaderboard-won' : 'leaderboard-lost'}`}>
                   <span className="leaderboard-rank">#{idx + 1}</span>
                   <span className="leaderboard-name">{entry.display_name || entry.email?.split('@')[0] || `Player ${idx + 1}`}</span>
+                  <span className="leaderboard-row-meta">
+                    {entry.trend === 'up' ? '↑' : entry.trend === 'down' ? '↓' : '→'}
+                  </span>
                   <span className="leaderboard-result" style={{ color: entry.score > 0 ? 'var(--secondary)' : 'rgba(255,255,255,0.5)' }}>
                     {entry.score > 0 ? '+' : ''}{entry.score} pts
                   </span>
