@@ -1,7 +1,7 @@
-const db = require('../../../../server/db');
 const { getUserFromRequest } = require('../../../../server/supabaseAuth');
 const { applyCors } = require('../../../../server/cors');
 const crypto = require('crypto');
+const { requireSupabaseAdmin } = require('../../../../server/supabaseAdmin');
 
 export default async function handler(req, res) {
   if (applyCors(req, res)) return;
@@ -17,9 +17,16 @@ export default async function handler(req, res) {
   if (!groupId) return res.status(400).json({ error: 'group id is required' });
 
   try {
-    // Verify membership
-    const member = await db.query('SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2', [groupId, user.id]);
-    if (member.rowCount === 0) {
+    const supabaseAdmin = requireSupabaseAdmin();
+
+    const { data: memberRows, error: memberErr } = await supabaseAdmin
+      .from('group_members')
+      .select('role')
+      .eq('group_id', groupId)
+      .eq('user_id', user.id)
+      .limit(1);
+    if (memberErr) throw memberErr;
+    if (!memberRows || memberRows.length === 0) {
       return res.status(403).json({ error: 'forbidden' });
     }
 
@@ -27,12 +34,14 @@ export default async function handler(req, res) {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
 
-    const invite = await db.query(
-      'INSERT INTO invites (group_id, token, inviter_id, expires_at) VALUES ($1, $2, $3, $4) RETURNING token, expires_at',
-      [groupId, token, user.id, expiresAt.toISOString()]
-    );
+    const { data: invite, error: inviteErr } = await supabaseAdmin
+      .from('invites')
+      .insert({ group_id: groupId, token, inviter_id: user.id, expires_at: expiresAt.toISOString() })
+      .select('token,expires_at')
+      .single();
+    if (inviteErr) throw inviteErr;
 
-    return res.status(200).json(invite.rows[0]);
+    return res.status(200).json(invite);
   } catch (err) {
     console.error('invite error', err);
     return res.status(500).json({ error: 'internal server error' });

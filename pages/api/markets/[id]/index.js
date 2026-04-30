@@ -1,6 +1,5 @@
-const db = require('../../../../server/db');
 const { applyCors } = require('../../../../server/cors');
-const { getUserFromRequest } = require('../../../../server/supabaseAuth');
+const { requireSupabaseAdmin } = require('../../../../server/supabaseAdmin');
 
 async function handler(req, res) {
   if (applyCors(req, res)) return;
@@ -12,22 +11,38 @@ async function handler(req, res) {
   const marketId = req.query.id;
 
   try {
-    const result = await db.query(
-      `SELECT m.id, m.group_id, m.creator_id, m.title, m.type, m.state,
-              m.resolve_by, m.resolution, m.created_at,
-              (SELECT count(*) FROM predictions WHERE market_id = m.id)::int as prediction_count,
-              (SELECT count(*) FILTER (WHERE choice = true) FROM predictions WHERE market_id = m.id)::int as yes_count,
-              (SELECT count(*) FILTER (WHERE choice = false) FROM predictions WHERE market_id = m.id)::int as no_count
-       FROM markets m
-       WHERE m.id = $1`,
-      [marketId]
-    );
+    const supabaseAdmin = requireSupabaseAdmin();
 
-    if (result.rowCount === 0) {
+    const { data: marketRows, error: marketErr } = await supabaseAdmin
+      .from('markets')
+      .select('id,group_id,creator_id,title,type,state,resolve_by,resolution,created_at')
+      .eq('id', marketId)
+      .limit(1);
+    if (marketErr) throw marketErr;
+
+    const market = marketRows?.[0];
+    if (!market) {
       return res.status(404).json({ error: 'market not found' });
     }
 
-    return res.status(200).json({ market: result.rows[0] });
+    const { data: predictionRows, error: predictionErr } = await supabaseAdmin
+      .from('predictions')
+      .select('choice')
+      .eq('market_id', marketId);
+    if (predictionErr) throw predictionErr;
+
+    const predictionCount = (predictionRows || []).length;
+    const yesCount = (predictionRows || []).filter((row) => row.choice === true).length;
+    const noCount = (predictionRows || []).filter((row) => row.choice === false).length;
+
+    return res.status(200).json({
+      market: {
+        ...market,
+        prediction_count: predictionCount,
+        yes_count: yesCount,
+        no_count: noCount,
+      },
+    });
   } catch (e) {
     console.error('market detail error', e);
     return res.status(500).json({ error: 'internal' });
