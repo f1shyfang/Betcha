@@ -14,6 +14,12 @@ export default function LoginPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (router.query.created === 'true') {
+      setMessage('Account created — please log in.');
+    }
+  }, [router.query.created]);
+
+  useEffect(() => {
     let mounted = true;
 
     const loadSession = async () => {
@@ -47,8 +53,10 @@ export default function LoginPage() {
         password,
       });
       if (signInError) throw signInError;
-      setMessage('Logged in successfully.');
+      setMessage('Logged in successfully. Redirecting...');
       setPassword('');
+      const dest = router.query.redirect || '/groups';
+      setTimeout(() => router.push(dest), 800);
     } catch (err) {
       setError(err.message || 'Authentication failed.');
     } finally {

@@ -129,32 +129,57 @@ Run one real 14-day Betcha pilot with 2-3 friend groups (6-10 total friends) acr
 - Pilot recruitment should include a contingency plan if 2-3 groups are not available by day 7.
 - A light legal sanity pass should verify score-only mechanics for the intended launch jurisdiction.
 
+## Design Decisions (from /plan-design-review 2026-04-30)
+
+### Information Architecture
+- **D3 ACCEPTED**: Flip group dashboard order — Live Markets → Leaderboard → Create Market form. Users see social context before being asked to create. (groups/[id].js)
+- **D4 ACCEPTED**: Hide "Resolve Market" controls from non-creators. Conditionally render based on `currentUser.id === market.creator_id`. Requires `creator_id` in markets API response. (markets/[id].js)
+
+### Interaction States
+- **D5 ACCEPTED**: Fix invite banner — show full shareable URL (`window.location.origin + '/join?token=' + token`) with copy button. Remove "POST /api/groups/join" API docs from UI. (groups/[id].js)
+- **D6 ACCEPTED**: Show user's own prediction after voting. Filter predictions for currentUser.id, display "Your prediction: YES/NO" below odds bar, dim unchosen button. (markets/[id].js)
+- **D7 ACCEPTED**: Replace bare "Loading..." text with skeleton shimmer states on all 4 app pages. One CSS shimmer animation, 4 component changes.
+- **D11 ACCEPTED**: Create `/join?token=` route (pages/join.js). If not logged in: show "Join Betcha to accept this invite" with signup/login buttons, preserving token in URL. If logged in: auto-call POST /api/groups/join and redirect to group.
+
+### Emotional Arc
+- **D8 ACCEPTED**: Replace bare resolution banner with: outcome prominently + correct predictors list + score delta for current user + share button. Transforms the climactic product moment from announcement to social payoff. (markets/[id].js)
+
+### AI Slop Removal
+- **D9 ACCEPTED**: Replace both 3-column feature grids (`.cards` section lines 241-253 and `.use-cases` section lines 255-268) with a single differentiated section — horizontal scrolling ticker of real-sounding example market questions, or a large-type statement block. (~45 min implementation)
+- **D10 ACCEPTED**: Remove Quick Create market widget from landing page (lines 194-237). Landing has one job: waitlist capture. Quick Create belongs in the authenticated app only.
+
+### Auth Flow
+- **D13 ACCEPTED**: Auto-redirect after auth success. Login → /groups after 500ms delay. Signup → /login (with `?created=true` param so login.js can show "Account created — please log in").
+
+### Design System
+- Use existing `.leaderboard-section` and `.leaderboard-row` CSS classes for leaderboard in groups/[id].js instead of generic `.cards` grid.
+- **D12 ACCEPTED**: Fix leaderboard to show email-prefix or display_name instead of UUID fragments. Requires JOIN on users table in /api/groups/[id]/leaderboard endpoint.
+
+### Deferred (explicit)
+- Whether a logged-in user visiting the landing page should auto-redirect to /groups — deferred, not pilot-critical.
+- Tablet breakpoint (between 640px mobile and 1100px desktop) — deferred, pilot is mobile-first.
+- First-time user onboarding state for new group members — deferred to post-pilot.
+
+## NOT in scope
+- Real-money rails
+- Season mechanics
+- Full analytics
+- Forgot password flow (Supabase handles via email)
+- Push notifications
+
+## What already exists
+- `globals.css`: Complete design token system matching DESIGN.md — Cabinet Grotesk, Source Sans 3, Geist, color variables, leaderboard CSS classes (`.leaderboard-section`, `.leaderboard-row`), bottom nav, market cards, animation system.
+- All 7 pages are built. This review addresses UX gaps in the implementation, not greenfield design.
+
 ## GSTACK REVIEW REPORT
 
-| Review | Result |
-|---|---|
-| Step 0: Scope Challenge | Accepted as-is |
-| Architecture Review | 1 issue found (dispute tie handling). |
-| Code Quality Review | No major issues found. |
-| Test Review | Coverage diagram produced; 4 gaps identified (see test plan file). |
-| Performance Review | 2 issues found (ensure indexes; serialize resolves in DB transactions). |
-| NOT in scope | Real-money rails; season mechanics; full analytics. |
-| What already exists | No existing implementation; design doc is source of truth. |
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | clean | mode: Approach A, 0 critical gaps |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_open | 4 issues, 2 critical gaps |
+| Design Review | `/plan-design-review` | UI/UX gaps | 1 | issues_open | score: 2/10 → 7/10, 10 decisions |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
 
-### TODOS proposed
-- Add DB transaction + unique constraint for `resolutions.market_id` (prevents concurrent double-resolve).
-- Add idempotency-key handling for `predictions` and `resolve` endpoints.
-- Add Row-Level Security (RLS) policies for Supabase and enforce invite-token flow server-side.
-- Implement E2E tests: market create → predict → resolve (CRITICAL).
-
-Test plan saved: [~/.gstack/projects/hackerhouse/mf-20260429-main-eng-review-test-plan-20260429-120000.md](~/.gstack/projects/hackerhouse/mf-20260429-main-eng-review-test-plan-20260429-120000.md)
-
-**Parallelization**: 2 lanes — Backend (DB schema, API endpoints, transactions, RLS) and Frontend (Next.js pages, invite UX, client handling). Backend should be tackled first.
-
-**Failure modes**: concurrent resolve race flagged as CRITICAL GAP (no test + no transaction) — must fix before pilot invites.
-
-Outside voice: skipped (no external codex review ran).
-
-Completion status: ISSUES_OPEN — unresolved: dispute tie policy and TODO approvals.
-
-GSTACK REVIEW: saved on 2026-04-29 by plan-eng-review.
+- **UNRESOLVED:** 1 deferred design decision (logged-in user landing page redirect)
+- **VERDICT:** Eng Review has open issues — run eng review before pilot invitations go live.

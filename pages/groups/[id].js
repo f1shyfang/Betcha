@@ -94,15 +94,29 @@ export default function GroupDetail() {
     }
   };
 
+  const copyInviteLink = () => {
+    if (!inviteToken) return;
+    const url = `${window.location.origin}/join?token=${inviteToken}`;
+    navigator.clipboard.writeText(url).catch(() => {});
+  };
+
   if (loading) return <div className="page">Loading...</div>;
 
   return (
     <div className="page">
-      <Head><title>Group Markets - Betcha</title></Head>
+      <Head><title>{group?.name || 'Group'} - Betcha</title></Head>
       <header className="topbar">
         <div className="brand-lockup">
           <span className="brand-mark">B</span>
-          <div className="brand-name">Betcha</div>
+          <div>
+            <div className="brand-name">Betcha</div>
+            <Link href="/groups" className="brand-tag" style={{ textDecoration: 'none' }}>← My Groups</Link>
+          </div>
+        </div>
+        <div className="dashboard-actions">
+          <button className="button button-secondary button-sm" onClick={createInvite}>
+            Generate Invite Link
+          </button>
         </div>
       </header>
 
@@ -111,48 +125,29 @@ export default function GroupDetail() {
           <div className="dashboard-title-area">
             <h1 className="dashboard-title">{group?.name || 'Group Dashboard'}</h1>
           </div>
-          <div className="dashboard-actions">
-            <button className="button button-secondary button-sm" onClick={createInvite}>
-              Generate Invite Link
-            </button>
-          </div>
         </div>
 
         {inviteToken && (
-          <div className="invite-banner" style={{ marginBottom: '32px' }}>
-            <span className="invite-label">Invite Token</span>
-            <span className="invite-link">{inviteToken}</span>
-            <span style={{fontSize: '12px', color: 'var(--muted)'}}>POST /api/groups/join</span>
+          <div className="invite-banner" style={{ marginBottom: '24px' }}>
+            <span className="invite-label">Invite Link</span>
+            <span className="invite-link">{window.location.origin}/join?token={inviteToken}</span>
+            <button className="button button-secondary button-sm" onClick={copyInviteLink} style={{ whiteSpace: 'nowrap' }}>
+              Copy Link
+            </button>
           </div>
         )}
 
-        <form className="create-form" onSubmit={createMarket} style={{ marginBottom: '32px' }}>
-          <div className="dashboard-header">
-            <h2 className="dashboard-title" style={{ fontSize: '24px' }}>Create New Market</h2>
-          </div>
-          <div className="form-row">
-            <label className="label">
-              Market Question
-              <input 
-                type="text" 
-                value={newMarketTitle}
-                onChange={(e) => setNewMarketTitle(e.target.value)}
-                placeholder="Will Sam go to the gym tomorrow?"
-                required 
-              />
-            </label>
-          </div>
-          <button type="submit" className="button">Create Market</button>
-        </form>
-
-        <section>
+        <section style={{ marginBottom: '32px' }}>
           <div className="dashboard-header" style={{ marginBottom: '16px' }}>
             <h2 className="dashboard-title" style={{ fontSize: '24px' }}>Live Markets</h2>
+            <button className="button button-sm" onClick={() => document.getElementById('create-market-form').scrollIntoView({ behavior: 'smooth' })}>
+              + New Market
+            </button>
           </div>
           {markets.length === 0 ? (
             <div className="empty-state">
               <h3>No markets yet</h3>
-              <p>Create one above to get started.</p>
+              <p>Be the first to create one — use the form below.</p>
             </div>
           ) : (
             <div className="markets-grid">
@@ -171,27 +166,45 @@ export default function GroupDetail() {
           )}
         </section>
 
-        <section style={{ marginTop: '32px' }}>
+        <section className="leaderboard-section" style={{ marginBottom: '32px' }}>
           <div className="dashboard-header" style={{ marginBottom: '16px' }}>
-            <h2 className="dashboard-title" style={{ fontSize: '24px' }}>Leaderboard</h2>
+            <h2 className="section-title" style={{ color: '#f8fafb' }}>Leaderboard</h2>
           </div>
           {leaderboard.length === 0 ? (
-            <div className="empty-state">
-              <p>No scores yet.</p>
-            </div>
+            <p style={{ color: 'rgba(255,255,255,0.5)', margin: 0 }}>No scores yet — resolve a market to get started.</p>
           ) : (
-            <div className="cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+            <ol className="leaderboard-list">
               {leaderboard.map((entry, idx) => (
-                <div key={entry.user_id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>
-                    <strong>#{idx + 1}</strong> User {entry.user_id.substring(0, 4)}
+                <li key={entry.user_id} className={`leaderboard-row ${entry.score > 0 ? 'leaderboard-won' : 'leaderboard-lost'}`}>
+                  <span className="leaderboard-rank">#{idx + 1}</span>
+                  <span className="leaderboard-name">{entry.display_name || entry.email?.split('@')[0] || `Player ${idx + 1}`}</span>
+                  <span className="leaderboard-result" style={{ color: entry.score > 0 ? 'var(--secondary)' : 'rgba(255,255,255,0.5)' }}>
+                    {entry.score > 0 ? '+' : ''}{entry.score} pts
                   </span>
-                  <strong style={{ fontFamily: 'Geist, sans-serif', fontSize: '20px', color: 'var(--secondary)' }}>{entry.score}</strong>
-                </div>
+                </li>
               ))}
-            </div>
+            </ol>
           )}
         </section>
+
+        <form id="create-market-form" className="create-form" onSubmit={createMarket} style={{ marginBottom: '32px' }}>
+          <div className="dashboard-header">
+            <h2 className="dashboard-title" style={{ fontSize: '24px' }}>Create New Market</h2>
+          </div>
+          <div className="form-row">
+            <label className="label">
+              Market Question
+              <input
+                type="text"
+                value={newMarketTitle}
+                onChange={(e) => setNewMarketTitle(e.target.value)}
+                placeholder="Will Sam go to the gym tomorrow?"
+                required
+              />
+            </label>
+          </div>
+          <button type="submit" className="button">Create Market</button>
+        </form>
       </main>
 
       <nav className="bottom-nav" aria-label="Main navigation">

@@ -11,8 +11,10 @@ export default function MarketDetail() {
   const [market, setMarket] = useState(null);
   const [yesCount, setYesCount] = useState(0);
   const [noCount, setNoCount] = useState(0);
+  const [myPrediction, setMyPrediction] = useState(null); // true | false | null
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState(null);
 
   useEffect(() => {
     if (!id) return;
@@ -26,6 +28,7 @@ export default function MarketDetail() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return router.push('/');
+      setCurrentUserId(session.user.id);
 
       // For simplicity, just refetch all from group and find it, or we could add a single GET /api/markets/:id
       const res = await fetch(`/api/markets`, {
@@ -60,6 +63,8 @@ export default function MarketDetail() {
       setYesCount(yes);
       setNoCount(no);
       setLastUpdatedAt(new Date());
+      const mine = predictions.find((p) => p.user_id === session.user.id);
+      setMyPrediction(mine !== undefined ? mine.choice : null);
     } catch (err) {
       console.error(err);
     }
@@ -138,10 +143,27 @@ export default function MarketDetail() {
                 ? lastUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
                 : '...'}
             </div>
+            {myPrediction !== null && (
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: '999px',
+                fontSize: '13px',
+                fontWeight: 600,
+                background: myPrediction ? 'rgba(0,194,168,0.12)' : 'rgba(255,90,95,0.12)',
+                color: myPrediction ? '#0d6b60' : '#8c2727',
+                border: `1px solid ${myPrediction ? 'rgba(0,194,168,0.25)' : 'rgba(255,90,95,0.25)'}`,
+                width: 'fit-content',
+              }}>
+                Your prediction: {myPrediction ? 'YES ✓' : 'NO ✓'}
+              </div>
+            )}
           </div>
         </section>
 
-        {market.state === 'open' && (
+        {market.state === 'open' && myPrediction === null && (
           <section className="prediction-section" style={{ marginTop: '24px' }}>
             <h2 className="section-title">Place Your Prediction</h2>
             <div className="prediction-buttons">
@@ -155,9 +177,9 @@ export default function MarketDetail() {
           </section>
         )}
 
-        {market.state === 'open' && (
+        {market.state === 'open' && (!market.creator_id || market.creator_id === currentUserId) && (
           <section className="resolve-section" style={{ marginTop: '24px' }}>
-            <h2 className="section-title" style={{ fontSize: '16px', color: 'var(--muted)' }}>Creator Actions: Resolve Market</h2>
+            <h2 className="section-title" style={{ fontSize: '16px', color: 'var(--muted)' }}>Resolve Market</h2>
             <div className="prediction-buttons">
               <button className="button button-secondary" onClick={() => handleResolve(true)}>Resolve YES</button>
               <button className="button button-secondary" onClick={() => handleResolve(false)}>Resolve NO</button>

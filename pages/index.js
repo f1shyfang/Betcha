@@ -1,20 +1,10 @@
 import { useState } from 'react';
-import { useRouter } from 'next/router';
-import { createMarket } from '../lib/api';
 
 export default function Home() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [status, setStatus] = useState('idle');
   const [message, setMessage] = useState('');
-
-  // Quick-create market state
-  const [showQuickCreate, setShowQuickCreate] = useState(false);
-  const [quickTitle, setQuickTitle] = useState('');
-  const [quickGroupId, setQuickGroupId] = useState('');
-  const [quickCreating, setQuickCreating] = useState(false);
-  const [quickError, setQuickError] = useState('');
 
   const submit = async (e) => {
     e.preventDefault();
@@ -42,28 +32,6 @@ export default function Home() {
     } catch (err) {
       setStatus('error');
       setMessage('Network error. Try again.');
-    }
-  };
-
-  const handleQuickCreate = async (e) => {
-    e.preventDefault();
-    if (!quickTitle.trim()) return;
-    setQuickCreating(true);
-    setQuickError('');
-    try {
-      const result = await createMarket({
-        title: quickTitle.trim(),
-        groupId: quickGroupId || undefined,
-      });
-      if (result.market?.group_id) {
-        router.push(`/groups/${result.market.group_id}`);
-      } else if (result.market?.id) {
-        router.push(`/markets/${result.market.id}`);
-      }
-    } catch (err) {
-      setQuickError(err.message || 'Failed to create market');
-    } finally {
-      setQuickCreating(false);
     }
   };
 
@@ -191,79 +159,27 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="quick-create-section" aria-label="Quick create market">
-        <div className="quick-create-header">
-          <h2>Create a market in seconds</h2>
-          <p className="subhead">Type a question, pick a group, and you're live.</p>
-        </div>
-        {!showQuickCreate ? (
-          <button className="button" onClick={() => setShowQuickCreate(true)}>
-            + Create a market
-          </button>
-        ) : (
-          <form className="create-form" onSubmit={handleQuickCreate}>
-            <label className="label">
-              Your market question
-              <input
-                type="text"
-                value={quickTitle}
-                onChange={(e) => setQuickTitle(e.target.value)}
-                placeholder="Will Alex finish the project by Friday?"
-                required
-                autoFocus
-              />
-            </label>
-            <label className="label">
-              Group ID (optional)
-              <input
-                type="text"
-                value={quickGroupId}
-                onChange={(e) => setQuickGroupId(e.target.value)}
-                placeholder="Paste a group ID from your dashboard"
-              />
-            </label>
-            <div className="form-row">
-              <button className="button" type="submit" disabled={quickCreating}>
-                {quickCreating ? 'Creating...' : 'Create market'}
-              </button>
-              <button className="button button-ghost" type="button" onClick={() => setShowQuickCreate(false)}>
-                Cancel
-              </button>
-            </div>
-            {quickError && (
-              <div className="message error" role="alert">{quickError}</div>
-            )}
-          </form>
-        )}
-      </section>
-
-      <section className="cards" aria-label="Why Betcha">
-        <div className="card">
-          <h3>Accountability-first</h3>
-          <p>Turn habits, chores, and plans into a shared loop people can see.</p>
-        </div>
-        <div className="card">
-          <h3>Invite-only groups</h3>
-          <p>Private markets keep the vibe small, social, and low-noise.</p>
-        </div>
-        <div className="card">
-          <h3>Fast to start</h3>
-          <p>Create a market in seconds, then let the group do the rest.</p>
-        </div>
-      </section>
-
-      <section className="use-cases">
-        <div className="use-case">
-          <h4>Accountability</h4>
-          <p>Gym streaks, chores, daily habits, and weekly check-ins.</p>
-        </div>
-        <div className="use-case">
-          <h4>Fun</h4>
-          <p>Game night outcomes, social dares, and friendly rivalry.</p>
-        </div>
-        <div className="use-case">
-          <h4>Rituals</h4>
-          <p>Recurring markets that give your group something to return to.</p>
+      <section className="market-ticker-section" aria-label="Example markets">
+        <div className="market-ticker-label">What Betcha groups bet on</div>
+        <div className="market-ticker" aria-hidden="true">
+          <div className="market-ticker-track">
+            {[
+              'Will Sam gym 4× this week?',
+              'Does the apartment stay clean til Sunday?',
+              'Who wins Friday trivia?',
+              'Will Alex finish the sprint by Thursday?',
+              'Will Mia beat her 5K PR?',
+              'Does the group actually finish the movie tonight?',
+              'Will Jordan go to bed before 1am?',
+              'Who picks up groceries first?',
+              'Will Sam gym 4× this week?',
+              'Does the apartment stay clean til Sunday?',
+              'Who wins Friday trivia?',
+              'Will Alex finish the sprint by Thursday?',
+            ].map((q, i) => (
+              <span key={i} className="market-ticker-item">{q}</span>
+            ))}
+          </div>
         </div>
       </section>
 

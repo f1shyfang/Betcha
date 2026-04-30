@@ -47,8 +47,10 @@ export default function SignupPage() {
         password,
       });
       if (signUpError) throw signUpError;
-      setMessage('Account created. You can now login.');
+      setMessage('Account created! Redirecting to login...');
       setPassword('');
+      const redirectParam = router.query.redirect ? `&redirect=${encodeURIComponent(router.query.redirect)}` : '';
+      setTimeout(() => router.push(`/login?created=true${redirectParam}`), 800);
     } catch (err) {
       setError(err.message || 'Sign up failed.');
     } finally {
