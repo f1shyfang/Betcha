@@ -20,12 +20,12 @@ BEGIN
 
   INSERT INTO ledger_entries(user_id, market_id, delta, reason)
   SELECT
-    user_id,
+    predictions.user_id,
     p_market_id,
-    CASE WHEN choice = p_outcome THEN 1 ELSE -1 END,
-    CASE WHEN choice = p_outcome THEN 'win' ELSE 'loss' END
+    CASE WHEN predictions.choice = p_outcome THEN 1 ELSE -1 END,
+    CASE WHEN predictions.choice = p_outcome THEN 'win' ELSE 'loss' END
   FROM predictions
-  WHERE market_id = p_market_id;
+  WHERE predictions.market_id = p_market_id;
 
   INSERT INTO audit_logs(action, actor_id, meta)
   VALUES (
