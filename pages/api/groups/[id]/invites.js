@@ -35,8 +35,7 @@ export default async function handler(req, res) {
         .from('invites')
         .select('token,inviter_id,expires_at,used_by_user_id')
         .eq('group_id', groupId)
-        .gt('expires_at', new Date().toISOString())
-        .is('used_by_user_id', null);
+        .gt('expires_at', new Date().toISOString());
       if (inviteErr) throw inviteErr;
       return res.status(200).json(inviteRows || []);
     }
