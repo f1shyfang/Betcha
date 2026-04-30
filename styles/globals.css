@@ -1014,6 +1014,83 @@ select:focus {
   stroke: var(--primary);
 }
 
+/* ─── Support Chat ─── */
+
+.support-chat-fab {
+  position: fixed;
+  right: 18px;
+  bottom: 88px;
+  z-index: 110;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--primary) 0%, #ff7478 100%);
+  color: #fff;
+  font-size: 24px;
+  cursor: pointer;
+  box-shadow: 0 14px 30px rgba(255, 90, 95, 0.3);
+}
+
+.support-chat-panel {
+  position: fixed;
+  right: 18px;
+  bottom: 154px;
+  width: min(380px, calc(100vw - 24px));
+  max-height: 62vh;
+  z-index: 120;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px var(--shadow);
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.support-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.support-chat-messages {
+  min-height: 120px;
+  max-height: 32vh;
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.support-chat-bubble {
+  border-radius: 14px;
+  padding: 8px 10px;
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.support-chat-bubble.user {
+  background: rgba(18, 20, 23, 0.08);
+  justify-self: end;
+  max-width: 92%;
+}
+
+.support-chat-bubble.assistant {
+  background: rgba(0, 194, 168, 0.1);
+  border: 1px solid rgba(0, 194, 168, 0.2);
+  justify-self: start;
+  max-width: 92%;
+}
+
+.support-chat-compose {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: end;
+}
+
 /* ─── Market Ticker ─── */
 
 .market-ticker-section {
@@ -1253,5 +1330,17 @@ select:focus {
   .leaderboard-result {
     width: 100%;
     margin-left: 0;
+  }
+
+  .support-chat-fab {
+    right: 12px;
+    bottom: 82px;
+  }
+
+  .support-chat-panel {
+    right: 12px;
+    bottom: 146px;
+    width: calc(100vw - 24px);
+    max-height: 58vh;
   }
 }

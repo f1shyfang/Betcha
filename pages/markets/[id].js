@@ -18,6 +18,15 @@ export default function MarketDetail() {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [copied, setCopied] = useState(false);
   const [stakePoints, setStakePoints] = useState(100);
+  const [resolveReason, setResolveReason] = useState('');
+  const [resolveOutcomeDraft, setResolveOutcomeDraft] = useState(true);
+  const [supportChatOpen, setSupportChatOpen] = useState(false);
+  const [supportInput, setSupportInput] = useState('');
+  const [supportMessages, setSupportMessages] = useState([]);
+  const [supportLoading, setSupportLoading] = useState(false);
+  const [evidenceImageUrl, setEvidenceImageUrl] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [resolving, setResolving] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -91,12 +100,101 @@ export default function MarketDetail() {
     router.reload();
   };
 
-  const handleResolve = async (outcome) => {
+  const uploadEvidenceImage = async (file) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      alert('Please sign in again.');
+      return;
+    }
+    setUploadingImage(true);
     try {
-      await resolveMarket(id, outcome);
+      const uploadMeta = await fetch('/api/support/upload-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          fileName: file.name,
+          fileType: file.type,
+          fileSize: file.size,
+        }),
+      });
+      if (!uploadMeta.ok) {
+        const payload = await uploadMeta.json().catch(() => ({}));
+        throw new Error(payload.error || 'Failed to prepare upload');
+      }
+      const { uploadUrl, fileUrl } = await uploadMeta.json();
+
+      const uploadRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type,
+        },
+        body: file,
+      });
+      if (!uploadRes.ok) {
+        throw new Error('Failed to upload image');
+      }
+
+      setEvidenceImageUrl(fileUrl);
+    } catch (e) {
+      alert(e.message || 'Failed to upload image');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const askSupportChatbot = async () => {
+    if (!supportInput.trim()) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      alert('Please sign in again.');
+      return;
+    }
+    const userMessage = supportInput.trim();
+    setSupportMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
+    setSupportInput('');
+    setSupportLoading(true);
+    try {
+      const res = await fetch('/api/support/chatbot', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          marketTitle: market?.title,
+          outcome: resolveOutcomeDraft,
+          evidenceImageUrl,
+        }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(payload.error || 'Failed to get support reply');
+      }
+      const reply = payload.reply || '';
+      setSupportMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
+      if (reply) {
+        setResolveReason((prev) => (prev ? `${prev}\n${reply}` : reply));
+      }
+    } catch (e) {
+      alert(e.message || 'Support chatbot failed');
+    } finally {
+      setSupportLoading(false);
+    }
+  };
+
+  const handleResolve = async (outcome) => {
+    setResolving(true);
+    try {
+      await resolveMarket(id, outcome, 'creator', resolveReason, evidenceImageUrl);
       router.reload();
     } catch (e) {
       alert(e.message);
+    } finally {
+      setResolving(false);
     }
   };
 
@@ -247,9 +345,39 @@ export default function MarketDetail() {
         {market.state === 'open' && (!market.creator_id || market.creator_id === currentUserId) && (
           <section className="resolve-section" style={{ marginTop: '24px' }}>
             <h2 className="section-title" style={{ fontSize: '16px', color: 'var(--muted)' }}>Resolve Market</h2>
+            <label className="label">
+              Resolution reason
+              <input
+                type="text"
+                value={resolveReason}
+                onChange={(e) => setResolveReason(e.target.value)}
+                placeholder="Why this outcome is correct"
+              />
+            </label>
+            <label className="label">
+              Current resolve draft
+              <input type="text" value={resolveOutcomeDraft ? 'YES' : 'NO'} readOnly />
+            </label>
+            <label className="label">
+              Evidence image
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files && e.target.files[0];
+                  if (file) uploadEvidenceImage(file);
+                }}
+              />
+            </label>
+            {uploadingImage && <p className="prediction-confirmation">Uploading image...</p>}
+            {evidenceImageUrl && (
+              <p className="prediction-confirmation">
+                Evidence uploaded: <a href={evidenceImageUrl} target="_blank" rel="noreferrer">view image</a>
+              </p>
+            )}
             <div className="prediction-buttons">
-              <button className="button button-secondary" onClick={() => handleResolve(true)}>Resolve YES</button>
-              <button className="button button-secondary" onClick={() => handleResolve(false)}>Resolve NO</button>
+              <button className="button button-secondary" disabled={resolving} onClick={() => handleResolve(true)}>Resolve YES</button>
+              <button className="button button-secondary" disabled={resolving} onClick={() => handleResolve(false)}>Resolve NO</button>
             </div>
           </section>
         )}
@@ -358,6 +486,55 @@ export default function MarketDetail() {
           <span>Markets</span>
         </Link>
       </nav>
+
+      <button
+        className="support-chat-fab"
+        type="button"
+        onClick={() => setSupportChatOpen((open) => !open)}
+        aria-label="Open support chat"
+      >
+        💬
+      </button>
+
+      {supportChatOpen && (
+        <section className="support-chat-panel" aria-label="Support chat">
+          <div className="support-chat-header">
+            <strong>Support chatbot</strong>
+            <button className="button button-ghost button-sm" onClick={() => setSupportChatOpen(false)}>Close</button>
+          </div>
+          <label className="label">
+            Draft for outcome
+            <select value={resolveOutcomeDraft ? 'yes' : 'no'} onChange={(e) => setResolveOutcomeDraft(e.target.value === 'yes')}>
+              <option value="yes">YES</option>
+              <option value="no">NO</option>
+            </select>
+          </label>
+          <div className="support-chat-messages">
+            {supportMessages.length === 0 ? (
+              <p className="prediction-confirmation">Ask for help writing the resolve reason.</p>
+            ) : supportMessages.map((msg, idx) => (
+              <div key={`${msg.role}-${idx}`} className={`support-chat-bubble ${msg.role === 'user' ? 'user' : 'assistant'}`}>
+                {msg.content}
+              </div>
+            ))}
+          </div>
+          <div className="support-chat-compose">
+            <input
+              type="text"
+              value={supportInput}
+              onChange={(e) => setSupportInput(e.target.value)}
+              placeholder="Ask support for a resolution note..."
+            />
+            <button
+              className="button button-secondary button-sm"
+              onClick={askSupportChatbot}
+              disabled={supportLoading || !supportInput.trim()}
+            >
+              Send
+            </button>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

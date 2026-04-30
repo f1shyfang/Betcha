@@ -12,7 +12,7 @@ async function handler(req, res) {
 
   try {
     const marketId = req.query.id;
-    const { outcome, method = 'creator', reason = '' } = req.body || {};
+    const { outcome, method = 'creator', reason = '', evidence_image_url = '' } = req.body || {};
     const idempKey = req.headers['idempotency-key'];
     const user = await getUserFromRequest(req);
 
@@ -20,11 +20,15 @@ async function handler(req, res) {
       return res.status(401).json({ error: 'unauthorized' });
     }
 
+    const reasonWithEvidence = evidence_image_url
+      ? `${reason}\nEvidence: ${evidence_image_url}`.trim()
+      : reason;
+
     const result = await handleResolve({
       marketId,
       outcome,
       method,
-      reason,
+      reason: reasonWithEvidence,
       idempKey,
       getIdempotentResponse,
       storeIdempotentResponse,
