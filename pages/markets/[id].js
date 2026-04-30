@@ -19,7 +19,6 @@ export default function MarketDetail() {
   const [copied, setCopied] = useState(false);
   const [stakePoints, setStakePoints] = useState(100);
   const [resolveReason, setResolveReason] = useState('');
-  const [resolveOutcomeDraft, setResolveOutcomeDraft] = useState(true);
   const [supportChatOpen, setSupportChatOpen] = useState(false);
   const [supportInput, setSupportInput] = useState('');
   const [supportMessages, setSupportMessages] = useState([]);
@@ -139,7 +138,7 @@ export default function MarketDetail() {
 
       setEvidenceImageUrl(fileUrl);
     } catch (e) {
-      alert(e.message || 'Failed to upload image');
+      console.error('Evidence image upload failed', e);
     } finally {
       setUploadingImage(false);
     }
@@ -166,7 +165,7 @@ export default function MarketDetail() {
         body: JSON.stringify({
           message: userMessage,
           marketTitle: market?.title,
-          outcome: resolveOutcomeDraft,
+          outcome: true,
           evidenceImageUrl,
         }),
       });
@@ -355,10 +354,6 @@ export default function MarketDetail() {
               />
             </label>
             <label className="label">
-              Current resolve draft
-              <input type="text" value={resolveOutcomeDraft ? 'YES' : 'NO'} readOnly />
-            </label>
-            <label className="label">
               Evidence image
               <input
                 type="file"
@@ -502,13 +497,6 @@ export default function MarketDetail() {
             <strong>Support chatbot</strong>
             <button className="button button-ghost button-sm" onClick={() => setSupportChatOpen(false)}>Close</button>
           </div>
-          <label className="label">
-            Draft for outcome
-            <select value={resolveOutcomeDraft ? 'yes' : 'no'} onChange={(e) => setResolveOutcomeDraft(e.target.value === 'yes')}>
-              <option value="yes">YES</option>
-              <option value="no">NO</option>
-            </select>
-          </label>
           <div className="support-chat-messages">
             {supportMessages.length === 0 ? (
               <p className="prediction-confirmation">Ask for help writing the resolve reason.</p>
