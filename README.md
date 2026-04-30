@@ -18,6 +18,8 @@ Copy `.env.example` to `.env.local` and set:
 - `DATABASE_URL` for Postgres
 - `SUPABASE_URL` and `SUPABASE_ANON_KEY` for server-side Supabase access
 - `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` for browser auth
+- `S3_BUCKET_NAME`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` for evidence image uploads
+- `S3_PUBLIC_BASE_URL` (optional) if you use a custom/public CDN domain for uploaded files
 
 `NEXT_PUBLIC_API_URL` is optional and usually left blank to use same-origin `/api/*`.
 

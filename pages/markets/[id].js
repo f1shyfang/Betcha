@@ -18,6 +18,13 @@ export default function MarketDetail() {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [copied, setCopied] = useState(false);
   const [stakePoints, setStakePoints] = useState(100);
+  const [resolveReason, setResolveReason] = useState('');
+  const [resolveOutcomeDraft, setResolveOutcomeDraft] = useState(true);
+  const [supportReply, setSupportReply] = useState('');
+  const [supportLoading, setSupportLoading] = useState(false);
+  const [evidenceImageUrl, setEvidenceImageUrl] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [resolving, setResolving] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -91,12 +98,97 @@ export default function MarketDetail() {
     router.reload();
   };
 
-  const handleResolve = async (outcome) => {
+  const uploadEvidenceImage = async (file) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      alert('Please sign in again.');
+      return;
+    }
+    setUploadingImage(true);
     try {
-      await resolveMarket(id, outcome);
+      const uploadMeta = await fetch('/api/support/upload-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          fileName: file.name,
+          fileType: file.type,
+          fileSize: file.size,
+        }),
+      });
+      if (!uploadMeta.ok) {
+        const payload = await uploadMeta.json().catch(() => ({}));
+        throw new Error(payload.error || 'Failed to prepare upload');
+      }
+      const { uploadUrl, fileUrl } = await uploadMeta.json();
+
+      const uploadRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type,
+        },
+        body: file,
+      });
+      if (!uploadRes.ok) {
+        throw new Error('Failed to upload image');
+      }
+
+      setEvidenceImageUrl(fileUrl);
+    } catch (e) {
+      alert(e.message || 'Failed to upload image');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const askSupportChatbot = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      alert('Please sign in again.');
+      return;
+    }
+    setSupportLoading(true);
+    setSupportReply('');
+    try {
+      const res = await fetch('/api/support/chatbot', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          message: resolveReason,
+          marketTitle: market?.title,
+          outcome: resolveOutcomeDraft,
+          evidenceImageUrl,
+        }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(payload.error || 'Failed to get support reply');
+      }
+      setSupportReply(payload.reply || '');
+    } catch (e) {
+      alert(e.message || 'Support chatbot failed');
+    } finally {
+      setSupportLoading(false);
+    }
+  };
+
+  const handleResolve = async (outcome) => {
+    setResolving(true);
+    try {
+      const combinedReason = supportReply
+        ? `${resolveReason}\n\nSupport note: ${supportReply}`.trim()
+        : resolveReason;
+      await resolveMarket(id, outcome, 'creator', combinedReason, evidenceImageUrl);
       router.reload();
     } catch (e) {
       alert(e.message);
+    } finally {
+      setResolving(false);
     }
   };
 
@@ -247,9 +339,54 @@ export default function MarketDetail() {
         {market.state === 'open' && (!market.creator_id || market.creator_id === currentUserId) && (
           <section className="resolve-section" style={{ marginTop: '24px' }}>
             <h2 className="section-title" style={{ fontSize: '16px', color: 'var(--muted)' }}>Resolve Market</h2>
+            <label className="label">
+              Resolution reason
+              <input
+                type="text"
+                value={resolveReason}
+                onChange={(e) => setResolveReason(e.target.value)}
+                placeholder="Why this outcome is correct"
+              />
+            </label>
+            <label className="label">
+              Draft support note for
+              <select value={resolveOutcomeDraft ? 'yes' : 'no'} onChange={(e) => setResolveOutcomeDraft(e.target.value === 'yes')}>
+                <option value="yes">YES</option>
+                <option value="no">NO</option>
+              </select>
+            </label>
+            <label className="label">
+              Evidence image
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files && e.target.files[0];
+                  if (file) uploadEvidenceImage(file);
+                }}
+              />
+            </label>
+            {uploadingImage && <p className="prediction-confirmation">Uploading image...</p>}
+            {evidenceImageUrl && (
+              <p className="prediction-confirmation">
+                Evidence uploaded: <a href={evidenceImageUrl} target="_blank" rel="noreferrer">view image</a>
+              </p>
+            )}
+            <button
+              className="button button-secondary"
+              onClick={askSupportChatbot}
+              disabled={supportLoading}
+            >
+              {supportLoading ? 'Thinking...' : 'Ask support chatbot'}
+            </button>
+            {supportReply && (
+              <p className="prediction-confirmation" style={{ whiteSpace: 'pre-wrap' }}>
+                {supportReply}
+              </p>
+            )}
             <div className="prediction-buttons">
-              <button className="button button-secondary" onClick={() => handleResolve(true)}>Resolve YES</button>
-              <button className="button button-secondary" onClick={() => handleResolve(false)}>Resolve NO</button>
+              <button className="button button-secondary" disabled={resolving} onClick={() => handleResolve(true)}>Resolve YES</button>
+              <button className="button button-secondary" disabled={resolving} onClick={() => handleResolve(false)}>Resolve NO</button>
             </div>
           </section>
         )}
