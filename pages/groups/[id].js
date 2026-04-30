@@ -99,6 +99,11 @@ export default function GroupDetail() {
     navigator.clipboard.writeText(url).catch(() => {});
   };
 
+  const copyInviteToken = () => {
+    if (!inviteToken) return;
+    navigator.clipboard.writeText(inviteToken).catch(() => {});
+  };
+
   if (loading) {
     return (
       <div className="page">
@@ -157,6 +162,9 @@ export default function GroupDetail() {
             <span className="invite-link">{window.location.origin}/join?token={inviteToken}</span>
             <button className="button button-secondary button-sm" onClick={copyInviteLink} style={{ whiteSpace: 'nowrap' }}>
               Copy Link
+            </button>
+            <button className="button button-secondary button-sm" onClick={copyInviteToken} style={{ whiteSpace: 'nowrap' }}>
+              Copy Token
             </button>
           </div>
         )}
