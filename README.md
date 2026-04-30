@@ -26,7 +26,7 @@ Copy `.env.example` to `.env.local` and set:
 - `npm run dev` — start full-stack app locally
 - `npm run build` — production build
 - `npm run start` — run production server
-- `npm run migrate` — apply SQL schema in `server/migrations/001_create_tables.sql`
+- `npm run migrate` — apply every SQL migration in `supabase/migrations/` in order, with a fallback to `server/migrations/` for local compatibility
 - `npm test` — resolve flow test
 
 ## API endpoints

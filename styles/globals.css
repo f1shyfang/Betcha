@@ -1,5 +1,16 @@
 @import url('https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@400,500,700&f[]=source-sans-3@400,500,600,700&f[]=geist@400,500,600,700&display=swap');
 
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, rgba(18,20,23,0.06) 25%, rgba(18,20,23,0.12) 50%, rgba(18,20,23,0.06) 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
 :root {
   --bg: #fafbfb;
   --bg-deep: #f2f4f6;
