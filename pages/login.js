@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import supabase from '../lib/supabase';
+import { authClient } from '../lib/authClient';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [session, setSession] = useState(null);
+  const { data: sessionData } = authClient.useSession();
+  const session = sessionData?.session || null;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,28 +20,6 @@ export default function LoginPage() {
     }
   }, [router.query.created]);
 
-  useEffect(() => {
-    let mounted = true;
-
-    const loadSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (mounted) {
-        setSession(data?.session || null);
-      }
-    };
-
-    loadSession();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession || null);
-    });
-
-    return () => {
-      mounted = false;
-      authListener?.subscription?.unsubscribe();
-    };
-  }, []);
-
   const handleAuth = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -48,11 +27,11 @@ export default function LoginPage() {
     setMessage('');
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { error: signInError } = await authClient.signIn.email({
         email: email.trim(),
         password,
       });
-      if (signInError) throw signInError;
+      if (signInError) throw new Error(signInError.message || 'Authentication failed.');
       setMessage('Logged in successfully. Redirecting...');
       setPassword('');
       const dest = router.query.redirect || '/groups';
@@ -67,7 +46,7 @@ export default function LoginPage() {
   const handleSignOut = async () => {
     setError('');
     setMessage('');
-    await supabase.auth.signOut();
+    await authClient.signOut();
   };
 
   return (

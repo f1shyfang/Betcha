@@ -1,21 +1,8 @@
 BEGIN;
 
-ALTER TABLE users
-  ADD COLUMN IF NOT EXISTS starting_points integer NOT NULL DEFAULT 2000;
-
-ALTER TABLE predictions
-  ADD COLUMN IF NOT EXISTS stake_points integer NOT NULL DEFAULT 1;
-
-UPDATE predictions
-SET stake_points = 1
-WHERE stake_points IS NULL OR stake_points <= 0;
-
-ALTER TABLE predictions
-  ADD CONSTRAINT predictions_stake_points_positive CHECK (stake_points > 0);
-
 CREATE OR REPLACE FUNCTION market_resolve_with_ledger(
   p_market_id uuid,
-  p_resolver_id uuid,
+  p_resolver_id text,
   p_outcome boolean,
   p_method text,
   p_reason text
@@ -25,7 +12,7 @@ AS $$
 BEGIN
   INSERT INTO resolutions(market_id, resolver_id, outcome, method, reason)
   VALUES (p_market_id, p_resolver_id, p_outcome, p_method, p_reason)
-  ON CONFLICT (market_id) DO NOTHING;
+  ON CONFLICT ON CONSTRAINT ux_resolutions_market_id DO NOTHING;
 
   UPDATE markets
   SET state = 'resolved',
@@ -43,7 +30,7 @@ BEGIN
   FROM predictions
   WHERE predictions.market_id = p_market_id
     AND predictions.choice = p_outcome
-  ON CONFLICT (market_id, user_id, reason) DO NOTHING;
+  ON CONFLICT ON CONSTRAINT ux_ledger_market_user_reason DO NOTHING;
 
   INSERT INTO audit_logs(action, actor_id, meta)
   VALUES (

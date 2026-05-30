@@ -1,5 +1,5 @@
-const { getUserFromRequest } = require('../../../server/supabaseAuth');
-const { applyCors } = require('../../../server/cors');
+import { getUserFromRequest } from '../../../lib/auth';
+import { applyCors } from '../../../server/cors';
 
 function buildReply({ message, marketTitle, outcome, evidenceImageUrl }) {
   const direction = outcome === true ? 'YES' : 'NO';
@@ -15,7 +15,7 @@ function buildReply({ message, marketTitle, outcome, evidenceImageUrl }) {
   ].join(' ');
 }
 
-async function handler(req, res) {
+export default async function handler(req, res) {
   if (applyCors(req, res)) return;
 
   if (req.method !== 'POST') {
@@ -40,6 +40,3 @@ async function handler(req, res) {
     return res.status(500).json({ error: 'internal' });
   }
 }
-
-module.exports = handler;
-module.exports.default = handler;

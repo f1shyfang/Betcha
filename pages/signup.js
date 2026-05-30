@@ -1,40 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import supabase from '../lib/supabase';
+import { authClient } from '../lib/authClient';
 
 export default function SignupPage() {
   const router = useRouter();
-  const [session, setSession] = useState(null);
+  const { data: sessionData } = authClient.useSession();
+  const session = sessionData?.session || null;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    let mounted = true;
-
-    const loadSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (mounted) {
-        setSession(data?.session || null);
-      }
-    };
-
-    loadSession();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession || null);
-    });
-
-    return () => {
-      mounted = false;
-      authListener?.subscription?.unsubscribe();
-    };
-  }, []);
 
   const handleSignUp = async (e) => {
     e.preventDefault();
@@ -43,30 +22,19 @@ export default function SignupPage() {
     setMessage('');
 
     try {
-      const { data: { user, session: newSession }, error: signUpError } = await supabase.auth.signUp({
+      // Better Auth creates the auth user and (via the create hook in lib/auth.js)
+      // mirrors it into the domain `users` table with display_name = name.
+      const { error: signUpError } = await authClient.signUp.email({
         email: email.trim(),
         password,
+        name: displayName.trim() || email.trim().split('@')[0],
       });
-      if (signUpError) throw signUpError;
+      if (signUpError) throw new Error(signUpError.message || 'Sign up failed.');
 
-      // If we got a session immediately (auto-confirm enabled), upsert display_name
-      if (newSession && user) {
-        try {
-          await fetch('/api/users/profile', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${newSession.access_token}`,
-            },
-            body: JSON.stringify({ display_name: displayName.trim() || null }),
-          });
-        } catch (_) {}
-      }
-
-      setMessage('Account created! Redirecting to login...');
+      setMessage('Account created! Redirecting...');
       setPassword('');
-      const redirectParam = router.query.redirect ? `&redirect=${encodeURIComponent(router.query.redirect)}` : '';
-      setTimeout(() => router.push(`/login?created=true${redirectParam}`), 800);
+      const dest = router.query.redirect || '/groups';
+      setTimeout(() => router.push(dest), 800);
     } catch (err) {
       setError(err.message || 'Sign up failed.');
     } finally {
@@ -77,7 +45,7 @@ export default function SignupPage() {
   const handleSignOut = async () => {
     setError('');
     setMessage('');
-    await supabase.auth.signOut();
+    await authClient.signOut();
   };
 
   return (

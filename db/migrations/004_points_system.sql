@@ -5,7 +5,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_ledger_market_user_reason
 
 CREATE OR REPLACE FUNCTION market_resolve_with_ledger(
   p_market_id uuid,
-  p_resolver_id uuid,
+  p_resolver_id text,
   p_outcome boolean,
   p_method text,
   p_reason text
@@ -15,7 +15,7 @@ AS $$
 DECLARE
   v_created_at timestamptz;
   v_resolve_by timestamptz;
-  v_creator_id uuid;
+  v_creator_id text;
   v_resolved_at timestamptz := now();
   v_end_at timestamptz;
   v_early_cutoff timestamptz;

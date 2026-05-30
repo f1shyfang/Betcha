@@ -1,53 +1,51 @@
-const { getUserFromRequest } = require('../../../server/supabaseAuth');
-const { applyCors } = require('../../../server/cors');
-const { requireSupabaseAdmin } = require('../../../server/supabaseAdmin');
+import { getUserFromRequest } from '../../../lib/auth';
+import { applyCors } from '../../../server/cors';
+import { query } from '../../../server/db';
 
-async function createGroupViaSupabase(user, name, isPrivate) {
-  const supabaseAdmin = requireSupabaseAdmin();
+async function createGroup(user, name, isPrivate) {
+  await query(
+    `INSERT INTO users (id, email) VALUES ($1, $2)
+     ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email`,
+    [user.id, user.email]
+  );
 
-  const { error: userErr } = await supabaseAdmin
-    .from('users')
-    .upsert({ id: user.id, email: user.email }, { onConflict: 'id' });
-  if (userErr) throw userErr;
-
-  const { data: groupRows, error: groupErr } = await supabaseAdmin
-    .from('groups')
-    .insert({ name, owner_id: user.id, is_private: isPrivate })
-    .select('id,name,is_private,created_at')
-    .limit(1);
-  if (groupErr) throw groupErr;
-
-  const group = groupRows?.[0];
+  const { rows: groupRows } = await query(
+    `INSERT INTO groups (name, owner_id, is_private)
+     VALUES ($1, $2, $3)
+     RETURNING id, name, is_private, created_at`,
+    [name, user.id, isPrivate]
+  );
+  const group = groupRows[0];
   if (!group) {
     throw new Error('group_create_failed');
   }
 
-  const { error: memberErr } = await supabaseAdmin
-    .from('group_members')
-    .insert({ group_id: group.id, user_id: user.id, role: 'admin' });
-  if (memberErr) {
-    await supabaseAdmin.from('groups').delete().eq('id', group.id);
+  try {
+    await query(
+      `INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'admin')`,
+      [group.id, user.id]
+    );
+  } catch (memberErr) {
+    await query('DELETE FROM groups WHERE id = $1', [group.id]);
     throw memberErr;
   }
 
   return group;
 }
 
-async function listGroupsViaSupabase(userId) {
-  const supabaseAdmin = requireSupabaseAdmin();
-
-  const { data, error } = await supabaseAdmin
-    .from('group_members')
-    .select('role,groups!inner(id,name,is_private,created_at)')
-    .eq('user_id', userId);
-
-  if (error) throw error;
-
-  return (data || []).map((row) => ({
-    id: row.groups.id,
-    name: row.groups.name,
-    is_private: row.groups.is_private,
-    created_at: row.groups.created_at,
+async function listGroups(userId) {
+  const { rows } = await query(
+    `SELECT g.id, g.name, g.is_private, g.created_at, gm.role
+     FROM group_members gm
+     JOIN groups g ON g.id = gm.group_id
+     WHERE gm.user_id = $1`,
+    [userId]
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    is_private: row.is_private,
+    created_at: row.created_at,
     role: row.role,
   }));
 }
@@ -63,7 +61,7 @@ export default async function handler(req, res) {
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     try {
-      const group = await createGroupViaSupabase(user, name, is_private);
+      const group = await createGroup(user, name, is_private);
       return res.status(200).json(group);
     } catch (err) {
       console.error('group create error', err);
@@ -76,7 +74,7 @@ export default async function handler(req, res) {
     if (!user) return res.status(401).json({ error: 'unauthorized' });
 
     try {
-      const groups = await listGroupsViaSupabase(user.id);
+      const groups = await listGroups(user.id);
       return res.status(200).json(groups);
     } catch (err) {
       console.error('groups list error', err);

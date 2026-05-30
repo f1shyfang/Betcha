@@ -1,6 +1,6 @@
-const { getUserFromRequest } = require('../../../../server/supabaseAuth');
-const { applyCors } = require('../../../../server/cors');
-const { requireSupabaseAdmin } = require('../../../../server/supabaseAdmin');
+import { getUserFromRequest } from '../../../../lib/auth';
+import { applyCors } from '../../../../server/cors';
+import { query } from '../../../../server/db';
 
 export default async function handler(req, res) {
   if (applyCors(req, res)) return;
@@ -16,39 +16,32 @@ export default async function handler(req, res) {
   if (!groupId) return res.status(400).json({ error: 'group id is required' });
 
   try {
-    const supabaseAdmin = requireSupabaseAdmin();
-
-    const { data: memberRows, error: memberErr } = await supabaseAdmin
-      .from('group_members')
-      .select('role')
-      .eq('group_id', groupId)
-      .eq('user_id', user.id)
-      .limit(1);
-    if (memberErr) throw memberErr;
-    if (!memberRows || memberRows.length === 0) {
+    const { rows: memberRows } = await query(
+      'SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2 LIMIT 1',
+      [groupId, user.id]
+    );
+    if (memberRows.length === 0) {
       return res.status(403).json({ error: 'forbidden' });
     }
 
-    const { data: marketRows, error: marketErr } = await supabaseAdmin
-      .from('markets')
-      .select('id')
-      .eq('group_id', groupId);
-    if (marketErr) throw marketErr;
+    const { rows: marketRows } = await query(
+      'SELECT id FROM markets WHERE group_id = $1',
+      [groupId]
+    );
+    const marketIds = marketRows.map((row) => row.id).filter(Boolean);
 
-    const marketIds = (marketRows || []).map((row) => row.id).filter(Boolean);
-    if (marketIds.length === 0) {
-      return res.status(200).json([]);
+    let ledgerRows = [];
+    if (marketIds.length > 0) {
+      const result = await query(
+        'SELECT user_id, market_id, delta, reason, created_at FROM ledger_entries WHERE market_id = ANY($1)',
+        [marketIds]
+      );
+      ledgerRows = result.rows;
     }
-
-    const { data: ledgerRows, error: ledgerErr } = await supabaseAdmin
-      .from('ledger_entries')
-      .select('user_id,market_id,delta,reason,created_at')
-      .in('market_id', marketIds);
-    if (ledgerErr) throw ledgerErr;
 
     const scores = new Map();
     const history = new Map();
-    for (const row of ledgerRows || []) {
+    for (const row of ledgerRows) {
       scores.set(row.user_id, (scores.get(row.user_id) || 0) + (row.delta || 0));
       if (!history.has(row.user_id)) history.set(row.user_id, []);
       history.get(row.user_id).push({
@@ -58,22 +51,19 @@ export default async function handler(req, res) {
       });
     }
 
-    const { data: groupMemberRows, error: groupMemberErr } = await supabaseAdmin
-      .from('group_members')
-      .select('user_id')
-      .eq('group_id', groupId);
-    if (groupMemberErr) throw groupMemberErr;
+    const { rows: groupMemberRows } = await query(
+      'SELECT user_id FROM group_members WHERE group_id = $1',
+      [groupId]
+    );
 
-    const scoredUserIds = [...new Set((groupMemberRows || []).map((row) => row.user_id).filter(Boolean))];
+    const scoredUserIds = [...new Set(groupMemberRows.map((row) => row.user_id).filter(Boolean))];
     if (scoredUserIds.length === 0) return res.status(200).json([]);
 
-    const { data: userRows, error: userErr } = await supabaseAdmin
-      .from('users')
-      .select('id,email,display_name,starting_points')
-      .in('id', scoredUserIds);
-    if (userErr) throw userErr;
-
-    const userMap = new Map((userRows || []).map((u) => [u.id, u]));
+    const { rows: userRows } = await query(
+      'SELECT id, email, display_name, starting_points FROM users WHERE id = ANY($1)',
+      [scoredUserIds]
+    );
+    const userMap = new Map(userRows.map((u) => [u.id, u]));
 
     const leaderboard = [...scores.entries()]
       .map(([userId, score]) => {

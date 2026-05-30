@@ -1,6 +1,6 @@
-const { getUserFromRequest } = require('../../../server/supabaseAuth');
-const { applyCors } = require('../../../server/cors');
-const { requireSupabaseAdmin } = require('../../../server/supabaseAdmin');
+import { getUserFromRequest } from '../../../lib/auth';
+import { applyCors } from '../../../server/cors';
+import { query } from '../../../server/db';
 
 export default async function handler(req, res) {
   if (applyCors(req, res)) return;
@@ -15,11 +15,14 @@ export default async function handler(req, res) {
   const { display_name } = req.body;
 
   try {
-    const supabaseAdmin = requireSupabaseAdmin();
-    const { error } = await supabaseAdmin
-      .from('users')
-      .upsert({ id: user.id, email: user.email, display_name: display_name || null }, { onConflict: 'id' });
-    if (error) throw error;
+    await query(
+      `INSERT INTO users (id, email, display_name)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (id) DO UPDATE
+         SET email = EXCLUDED.email,
+             display_name = EXCLUDED.display_name`,
+      [user.id, user.email, display_name || null]
+    );
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error('profile upsert error', err);

@@ -1,55 +1,43 @@
-const { getUserFromRequest } = require('../../../../server/supabaseAuth');
-const { applyCors } = require('../../../../server/cors');
-const { getIdempotentResponse, storeIdempotentResponse } = require('../../../../server/idempotency');
-const { requireSupabaseAdmin } = require('../../../../server/supabaseAdmin');
+import { getUserFromRequest } from '../../../../lib/auth';
+import { applyCors } from '../../../../server/cors';
+import { query } from '../../../../server/db';
+import { getIdempotentResponse, storeIdempotentResponse } from '../../../../server/idempotency';
 
 async function loadMarketWithMembership(marketId, userId) {
-  const supabaseAdmin = requireSupabaseAdmin();
-
-  const { data: marketRows, error: marketErr } = await supabaseAdmin
-    .from('markets')
-    .select('id,group_id,state')
-    .eq('id', marketId)
-    .limit(1);
-  if (marketErr) throw marketErr;
-  const market = marketRows?.[0];
+  const { rows: marketRows } = await query(
+    'SELECT id, group_id, state FROM markets WHERE id = $1 LIMIT 1',
+    [marketId]
+  );
+  const market = marketRows[0];
   if (!market) return { notFound: true };
 
-  const { data: memberRows, error: memberErr } = await supabaseAdmin
-    .from('group_members')
-    .select('role')
-    .eq('group_id', market.group_id)
-    .eq('user_id', userId)
-    .limit(1);
-  if (memberErr) throw memberErr;
-  if (!memberRows || memberRows.length === 0) return { forbidden: true };
+  const { rows: memberRows } = await query(
+    'SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2 LIMIT 1',
+    [market.group_id, userId]
+  );
+  if (memberRows.length === 0) return { forbidden: true };
 
   return { market };
 }
 
-async function listPredictionsViaSupabase(marketId, userId) {
+async function listPredictions(marketId, userId) {
   const marketStatus = await loadMarketWithMembership(marketId, userId);
   if (marketStatus.notFound) return { status: 404, body: { error: 'market not found' } };
   if (marketStatus.forbidden) return { status: 403, body: { error: 'forbidden' } };
 
-  const supabaseAdmin = requireSupabaseAdmin();
-  const { data, error } = await supabaseAdmin
-    .from('predictions')
-    .select('user_id,choice,stake_points,created_at')
-    .eq('market_id', marketId)
-    .order('created_at', { ascending: false });
-  if (error) throw error;
+  const { rows } = await query(
+    'SELECT user_id, choice, stake_points, created_at FROM predictions WHERE market_id = $1 ORDER BY created_at DESC',
+    [marketId]
+  );
 
-  const rows = data || [];
   const userIds = [...new Set(rows.map((p) => p.user_id))];
   let userMap = new Map();
   if (userIds.length > 0) {
-    const { data: userRows, error: userErr } = await supabaseAdmin
-      .from('users')
-      .select('id,email,display_name')
-      .in('id', userIds);
-    if (userErr) throw userErr;
-    userMap = new Map((userRows || []).map((u) => [u.id, u]));
+    const { rows: userRows } = await query(
+      'SELECT id, email, display_name FROM users WHERE id = ANY($1)',
+      [userIds]
+    );
+    userMap = new Map(userRows.map((u) => [u.id, u]));
   }
 
   const enriched = rows.map((p) => {
@@ -63,71 +51,59 @@ async function listPredictionsViaSupabase(marketId, userId) {
   return { status: 200, body: enriched };
 }
 
-async function getUserBalance(supabaseAdmin, userId) {
-  const { data: userRow, error: userErr } = await supabaseAdmin
-    .from('users')
-    .select('starting_points')
-    .eq('id', userId)
-    .limit(1)
-    .single();
-  if (userErr) throw userErr;
-
-  const { data: ledgerRows, error: ledgerErr } = await supabaseAdmin
-    .from('ledger_entries')
-    .select('delta')
-    .eq('user_id', userId);
-  if (ledgerErr) throw ledgerErr;
-
-  const ledgerTotal = (ledgerRows || []).reduce((sum, row) => sum + (row.delta || 0), 0);
-  return (userRow?.starting_points ?? 2000) + ledgerTotal;
+async function getUserBalance(userId) {
+  const { rows: userRows } = await query(
+    'SELECT starting_points FROM users WHERE id = $1 LIMIT 1',
+    [userId]
+  );
+  const { rows: ledgerRows } = await query(
+    'SELECT delta FROM ledger_entries WHERE user_id = $1',
+    [userId]
+  );
+  const ledgerTotal = ledgerRows.reduce((sum, row) => sum + (row.delta || 0), 0);
+  return (userRows[0]?.starting_points ?? 2000) + ledgerTotal;
 }
 
-async function createPredictionViaSupabase(marketId, userId, userEmail, choice, stakePoints) {
+async function createPrediction(marketId, userId, userEmail, choice, stakePoints) {
   const marketStatus = await loadMarketWithMembership(marketId, userId);
   if (marketStatus.notFound) return { status: 404, body: { error: 'market not found' } };
   if (marketStatus.forbidden) return { status: 403, body: { error: 'forbidden' } };
   if (marketStatus.market.state !== 'open') return { status: 400, body: { error: 'market is not open' } };
 
-  const supabaseAdmin = requireSupabaseAdmin();
-  const { error: userErr } = await supabaseAdmin
-    .from('users')
-    .upsert({ id: userId, email: userEmail }, { onConflict: 'id' });
-  if (userErr) throw userErr;
+  await query(
+    `INSERT INTO users (id, email) VALUES ($1, $2)
+     ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email`,
+    [userId, userEmail]
+  );
 
-  const balance = await getUserBalance(supabaseAdmin, userId);
+  const balance = await getUserBalance(userId);
   if (stakePoints > balance) {
     return { status: 400, body: { error: 'insufficient points', balance } };
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('predictions')
-    .insert({
-      market_id: marketId,
-      user_id: userId,
-      choice,
-      stake_points: stakePoints,
-      created_at: new Date().toISOString(),
-    })
-    .select('*')
-    .single();
-  if (error) {
+  let prediction;
+  try {
+    const { rows } = await query(
+      `INSERT INTO predictions (market_id, user_id, choice, stake_points)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [marketId, userId, choice, stakePoints]
+    );
+    prediction = rows[0];
+  } catch (error) {
     if (error.code === '23505') {
       return { status: 409, body: { error: 'prediction already placed for this market' } };
     }
     throw error;
   }
 
-  const { error: ledgerErr } = await supabaseAdmin
-    .from('ledger_entries')
-    .insert({
-      user_id: userId,
-      market_id: marketId,
-      delta: -stakePoints,
-      reason: 'wager_stake',
-    });
-  if (ledgerErr) throw ledgerErr;
+  await query(
+    `INSERT INTO ledger_entries (user_id, market_id, delta, reason)
+     VALUES ($1, $2, $3, 'wager_stake')`,
+    [userId, marketId, -stakePoints]
+  );
 
-  return { status: 200, body: data || null };
+  return { status: 200, body: prediction || null };
 }
 
 export default async function handler(req, res) {
@@ -139,8 +115,8 @@ export default async function handler(req, res) {
   const marketId = req.query.id;
   if (req.method === 'GET') {
     try {
-      const fallback = await listPredictionsViaSupabase(marketId, user.id);
-      return res.status(fallback.status).json(fallback.body);
+      const result = await listPredictions(marketId, user.id);
+      return res.status(result.status).json(result.body);
     } catch (err) {
       console.error('prediction list error', err);
       return res.status(500).json({ error: 'internal server error' });
@@ -163,10 +139,10 @@ export default async function handler(req, res) {
         if (prior) return res.status(200).json(prior);
       }
 
-      const fallback = await createPredictionViaSupabase(marketId, user.id, user.email, choice, stakePoints);
-      if (idempKey) await storeIdempotentResponse(idempKey, fallback.body);
+      const result = await createPrediction(marketId, user.id, user.email, choice, stakePoints);
+      if (idempKey && result.status === 200) await storeIdempotentResponse(idempKey, result.body);
 
-      return res.status(fallback.status).json(fallback.body);
+      return res.status(result.status).json(result.body);
     } catch (err) {
       console.error(err);
       return res.status(500).json({ error: 'internal server error' });

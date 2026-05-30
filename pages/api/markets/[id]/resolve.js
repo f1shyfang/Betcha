@@ -1,9 +1,9 @@
-const { handleResolve } = require('../../../../server/resolveHandler');
-const { getIdempotentResponse, storeIdempotentResponse } = require('../../../../server/idempotency');
-const { getUserFromRequest } = require('../../../../server/supabaseAuth');
-const { applyCors } = require('../../../../server/cors');
+import { handleResolve } from '../../../../server/resolveHandler';
+import { getIdempotentResponse, storeIdempotentResponse } from '../../../../server/idempotency';
+import { getUserFromRequest } from '../../../../lib/auth';
+import { applyCors } from '../../../../server/cors';
 
-async function handler(req, res) {
+export default async function handler(req, res) {
   if (applyCors(req, res)) return;
 
   if (req.method !== 'POST') {
@@ -32,7 +32,7 @@ async function handler(req, res) {
       idempKey,
       getIdempotentResponse,
       storeIdempotentResponse,
-      userId: user.id
+      userId: user.id,
     });
     return res.status(result.status).json(result.body);
   } catch (e) {
@@ -40,6 +40,3 @@ async function handler(req, res) {
     return res.status(500).json({ error: 'internal' });
   }
 }
-
-module.exports = handler;
-module.exports.default = handler;

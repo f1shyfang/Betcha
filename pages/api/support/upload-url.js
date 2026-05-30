@@ -1,9 +1,9 @@
-const crypto = require('crypto');
-const { PutObjectCommand } = require('@aws-sdk/client-s3');
-const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-const { getS3Client, getS3Config } = require('../../../server/s3');
-const { getUserFromRequest } = require('../../../server/supabaseAuth');
-const { applyCors } = require('../../../server/cors');
+import crypto from 'crypto';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { getS3Client, getS3Config } from '../../../server/s3';
+import { getUserFromRequest } from '../../../lib/auth';
+import { applyCors } from '../../../server/cors';
 
 const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024; // 8MB
 
@@ -14,7 +14,7 @@ function sanitizeFilename(name) {
     .slice(0, 80);
 }
 
-async function handler(req, res) {
+export default async function handler(req, res) {
   if (applyCors(req, res)) return;
 
   if (req.method !== 'POST') {
@@ -63,6 +63,3 @@ async function handler(req, res) {
     return res.status(500).json({ error: 'internal' });
   }
 }
-
-module.exports = handler;
-module.exports.default = handler;

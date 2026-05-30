@@ -1,8 +1,8 @@
-const { applyCors } = require('../../../../server/cors');
-const { requireSupabaseAdmin } = require('../../../../server/supabaseAdmin');
-const { getUserFromRequest } = require('../../../../server/supabaseAuth');
+import { applyCors } from '../../../../server/cors';
+import { query } from '../../../../server/db';
+import { getUserFromRequest } from '../../../../lib/auth';
 
-async function handler(req, res) {
+export default async function handler(req, res) {
   if (applyCors(req, res)) return;
 
   if (req.method !== 'GET') {
@@ -15,78 +15,62 @@ async function handler(req, res) {
   const marketId = req.query.id;
 
   try {
-    const supabaseAdmin = requireSupabaseAdmin();
-
-    const { data: marketRows, error: marketErr } = await supabaseAdmin
-      .from('markets')
-      .select('id,group_id,creator_id,title,type,state,resolve_by,resolution,created_at')
-      .eq('id', marketId)
-      .limit(1);
-    if (marketErr) throw marketErr;
-
-    const market = marketRows?.[0];
+    const { rows: marketRows } = await query(
+      `SELECT id, group_id, creator_id, title, type, state, resolve_by, resolution, created_at
+       FROM markets WHERE id = $1 LIMIT 1`,
+      [marketId]
+    );
+    const market = marketRows[0];
     if (!market) {
       return res.status(404).json({ error: 'market not found' });
     }
 
-    const { data: memberRows, error: memberErr } = await supabaseAdmin
-      .from('group_members')
-      .select('role')
-      .eq('group_id', market.group_id)
-      .eq('user_id', user.id)
-      .limit(1);
-    if (memberErr) throw memberErr;
-    if (!memberRows || memberRows.length === 0) {
+    const { rows: memberRows } = await query(
+      'SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2 LIMIT 1',
+      [market.group_id, user.id]
+    );
+    if (memberRows.length === 0) {
       return res.status(403).json({ error: 'forbidden' });
     }
 
-    const { data: predictionRows, error: predictionErr } = await supabaseAdmin
-      .from('predictions')
-      .select('choice')
-      .eq('market_id', marketId);
-    if (predictionErr) throw predictionErr;
+    const { rows: predictionRows } = await query(
+      'SELECT choice FROM predictions WHERE market_id = $1',
+      [marketId]
+    );
 
-    const { data: mySettlementRows, error: settlementErr } = await supabaseAdmin
-      .from('ledger_entries')
-      .select('delta,reason,created_at')
-      .eq('market_id', marketId)
-      .eq('user_id', user.id);
-    if (settlementErr) throw settlementErr;
+    const { rows: mySettlementRows } = await query(
+      'SELECT delta, reason, created_at FROM ledger_entries WHERE market_id = $1 AND user_id = $2',
+      [marketId, user.id]
+    );
 
-    const { data: myPredictionRow, error: myPredictionErr } = await supabaseAdmin
-      .from('predictions')
-      .select('stake_points,choice,created_at')
-      .eq('market_id', marketId)
-      .eq('user_id', user.id)
-      .limit(1)
-      .single();
-    if (myPredictionErr && myPredictionErr.code !== 'PGRST116') throw myPredictionErr;
+    const { rows: myPredictionRows } = await query(
+      'SELECT stake_points, choice, created_at FROM predictions WHERE market_id = $1 AND user_id = $2 LIMIT 1',
+      [marketId, user.id]
+    );
+    const myPredictionRow = myPredictionRows[0] || null;
 
-    const { data: userRow, error: userErr } = await supabaseAdmin
-      .from('users')
-      .select('starting_points')
-      .eq('id', user.id)
-      .limit(1)
-      .single();
-    if (userErr) throw userErr;
+    const { rows: userRows } = await query(
+      'SELECT starting_points FROM users WHERE id = $1 LIMIT 1',
+      [user.id]
+    );
+    const userRow = userRows[0];
 
-    const { data: allLedgerRows, error: allLedgerErr } = await supabaseAdmin
-      .from('ledger_entries')
-      .select('delta')
-      .eq('user_id', user.id);
-    if (allLedgerErr) throw allLedgerErr;
+    const { rows: allLedgerRows } = await query(
+      'SELECT delta FROM ledger_entries WHERE user_id = $1',
+      [user.id]
+    );
 
-    const predictionCount = (predictionRows || []).length;
-    const yesCount = (predictionRows || []).filter((row) => row.choice === true).length;
-    const noCount = (predictionRows || []).filter((row) => row.choice === false).length;
+    const predictionCount = predictionRows.length;
+    const yesCount = predictionRows.filter((row) => row.choice === true).length;
+    const noCount = predictionRows.filter((row) => row.choice === false).length;
 
     const settlementBreakdown = {};
     let settlementDelta = 0;
-    for (const row of mySettlementRows || []) {
+    for (const row of mySettlementRows) {
       settlementBreakdown[row.reason] = (settlementBreakdown[row.reason] || 0) + (row.delta || 0);
       settlementDelta += row.delta || 0;
     }
-    const userBalance = (userRow?.starting_points ?? 2000) + (allLedgerRows || []).reduce((sum, row) => sum + (row.delta || 0), 0);
+    const userBalance = (userRow?.starting_points ?? 2000) + allLedgerRows.reduce((sum, row) => sum + (row.delta || 0), 0);
 
     return res.status(200).json({
       market: {
@@ -98,7 +82,7 @@ async function handler(req, res) {
           total_delta: settlementDelta,
           breakdown: settlementBreakdown,
         },
-        my_prediction: myPredictionRow || null,
+        my_prediction: myPredictionRow,
         my_balance: userBalance,
       },
     });
@@ -107,6 +91,3 @@ async function handler(req, res) {
     return res.status(500).json({ error: 'internal' });
   }
 }
-
-module.exports = handler;
-module.exports.default = handler;
