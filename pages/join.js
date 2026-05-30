@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import supabase from '../lib/supabase';
+import { authClient } from '../lib/authClient';
 
 export default function JoinPage() {
   const router = useRouter();
@@ -18,25 +18,24 @@ export default function JoinPage() {
     }
 
     const tryAutoJoin = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const { data: sess } = await authClient.getSession();
+      if (!sess?.session) {
         setStatus('ready');
         return;
       }
-      joinGroup(session, token);
+      joinGroup(token);
     };
 
     tryAutoJoin();
   }, [router.isReady, token]);
 
-  const joinGroup = async (session, joinToken) => {
+  const joinGroup = async (joinToken) => {
     setStatus('joining');
     try {
       const res = await fetch('/api/groups/join', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ token: joinToken }),
       });

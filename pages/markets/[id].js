@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import supabase from '../../lib/supabase';
+import { authClient } from '../../lib/authClient';
 import Head from 'next/head';
 import Link from 'next/link';
 import { resolveMarket } from '../../lib/api';
@@ -37,13 +37,11 @@ export default function MarketDetail() {
 
   const fetchMarket = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return router.push('/');
-      setCurrentUserId(session.user.id);
+      const { data: sess } = await authClient.getSession();
+      if (!sess?.session) return router.push('/');
+      setCurrentUserId(sess.user.id);
 
-      const res = await fetch(`/api/markets/${id}`, {
-        headers: { Authorization: `Bearer ${session.access_token}` }
-      });
+      const res = await fetch(`/api/markets/${id}`);
       if (res.ok) {
         const data = await res.json();
         setMarket(data.market || null);
@@ -57,12 +55,10 @@ export default function MarketDetail() {
 
   const fetchPredictionStats = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session || !id) return;
+      const { data: sess } = await authClient.getSession();
+      if (!sess?.session || !id) return;
 
-      const res = await fetch(`/api/markets/${id}/predictions`, {
-        headers: { Authorization: `Bearer ${session.access_token}` }
-      });
+      const res = await fetch(`/api/markets/${id}/predictions`);
       if (!res.ok) return;
 
       const preds = await res.json();
@@ -72,7 +68,7 @@ export default function MarketDetail() {
       setNoCount(no);
       setPredictions(preds);
       setLastUpdatedAt(new Date());
-      const mine = preds.find((p) => p.user_id === session.user.id);
+      const mine = preds.find((p) => p.user_id === sess.user.id);
       setMyPrediction(mine !== undefined ? mine.choice : null);
     } catch (err) {
       console.error(err);
@@ -80,13 +76,12 @@ export default function MarketDetail() {
   };
 
   const placePrediction = async (choice) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const idempKey = `pred-${id}-${session.user.id}-${Date.now()}`;
+    const { data: sess } = await authClient.getSession();
+    const idempKey = `pred-${id}-${sess?.user?.id}-${Date.now()}`;
     const res = await fetch(`/api/markets/${id}/predictions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}`,
         'idempotency-key': idempKey
       },
       body: JSON.stringify({ choice, stake_points: stakePoints })
@@ -100,8 +95,8 @@ export default function MarketDetail() {
   };
 
   const uploadEvidenceImage = async (file) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+    const { data: sess } = await authClient.getSession();
+    if (!sess?.session) {
       alert('Please sign in again.');
       return;
     }
@@ -111,7 +106,6 @@ export default function MarketDetail() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           fileName: file.name,
@@ -146,8 +140,8 @@ export default function MarketDetail() {
 
   const askSupportChatbot = async () => {
     if (!supportInput.trim()) return;
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+    const { data: sess } = await authClient.getSession();
+    if (!sess?.session) {
       alert('Please sign in again.');
       return;
     }
@@ -160,7 +154,6 @@ export default function MarketDetail() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           message: userMessage,

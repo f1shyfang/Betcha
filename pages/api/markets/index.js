@@ -1,55 +1,42 @@
-const { getUserFromRequest } = require('../../../server/supabaseAuth');
-const { applyCors } = require('../../../server/cors');
-const { requireSupabaseAdmin } = require('../../../server/supabaseAdmin');
-const { getIdempotentResponse, storeIdempotentResponse } = require('../../../server/idempotency');
+import { getUserFromRequest } from '../../../lib/auth';
+import { applyCors } from '../../../server/cors';
+import { query } from '../../../server/db';
+import { getIdempotentResponse, storeIdempotentResponse } from '../../../server/idempotency';
 
 async function assertGroupMembership(groupId, userId) {
-  const supabaseAdmin = requireSupabaseAdmin();
-  const { data, error } = await supabaseAdmin
-    .from('group_members')
-    .select('role')
-    .eq('group_id', groupId)
-    .eq('user_id', userId)
-    .limit(1);
-  if (error) throw error;
-  return Boolean(data && data.length > 0);
+  const { rows } = await query(
+    'SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2 LIMIT 1',
+    [groupId, userId]
+  );
+  return rows.length > 0;
 }
 
-async function createMarketViaSupabase(user, payload) {
-  const supabaseAdmin = requireSupabaseAdmin();
+async function createMarket(user, payload) {
   const { group_id, title, resolve_by } = payload;
 
   const isMember = await assertGroupMembership(group_id, user.id);
   if (!isMember) return { forbidden: true };
 
-  const { data, error } = await supabaseAdmin
-    .from('markets')
-    .insert({
-      group_id,
-      creator_id: user.id,
-      title,
-      resolve_by: resolve_by || null,
-    })
-    .select('*')
-    .single();
-  if (error) throw error;
-
-  return { market: data };
+  const { rows } = await query(
+    `INSERT INTO markets (group_id, creator_id, title, resolve_by)
+     VALUES ($1, $2, $3, $4)
+     RETURNING *`,
+    [group_id, user.id, title, resolve_by || null]
+  );
+  return { market: rows[0] };
 }
 
 async function attachPredictionCounts(markets) {
-  const supabaseAdmin = requireSupabaseAdmin();
   const marketIds = (markets || []).map((market) => market.id).filter(Boolean);
   if (marketIds.length === 0) return markets;
 
-  const { data: predictionRows, error } = await supabaseAdmin
-    .from('predictions')
-    .select('market_id')
-    .in('market_id', marketIds);
-  if (error) throw error;
+  const { rows: predictionRows } = await query(
+    'SELECT market_id FROM predictions WHERE market_id = ANY($1)',
+    [marketIds]
+  );
 
   const counts = new Map();
-  for (const row of predictionRows || []) {
+  for (const row of predictionRows) {
     counts.set(row.market_id, (counts.get(row.market_id) || 0) + 1);
   }
 
@@ -77,7 +64,8 @@ export default async function handler(req, res) {
         if (prior) return res.status(200).json(prior);
       }
 
-      const result = await createMarketViaSupabase(user, { group_id, title, resolve_by });
+      const result = await createMarket(user, { group_id, title, resolve_by });
+      if (result.forbidden) return res.status(403).json({ error: 'forbidden' });
       if (idempKey) await storeIdempotentResponse(idempKey, result.market);
       return res.status(200).json(result.market);
     } catch (err) {
@@ -95,38 +83,28 @@ export default async function handler(req, res) {
         const allowed = await assertGroupMembership(group_id, user.id);
         if (!allowed) return res.status(403).json({ error: 'forbidden' });
 
-        const supabaseAdmin = requireSupabaseAdmin();
-        const { data: marketRows, error: marketErr } = await supabaseAdmin
-          .from('markets')
-          .select('*')
-          .eq('group_id', group_id)
-          .order('created_at', { ascending: false });
-        if (marketErr) throw marketErr;
-
-        const markets = await attachPredictionCounts(marketRows || []);
+        const { rows: marketRows } = await query(
+          'SELECT * FROM markets WHERE group_id = $1 ORDER BY created_at DESC',
+          [group_id]
+        );
+        const markets = await attachPredictionCounts(marketRows);
         return res.status(200).json(markets);
       }
 
-      const supabaseAdmin = requireSupabaseAdmin();
-      const { data: memberRows, error: memberErr } = await supabaseAdmin
-        .from('group_members')
-        .select('group_id')
-        .eq('user_id', user.id);
-      if (memberErr) throw memberErr;
-
-      const groupIds = [...new Set((memberRows || []).map((row) => row.group_id).filter(Boolean))];
+      const { rows: memberRows } = await query(
+        'SELECT group_id FROM group_members WHERE user_id = $1',
+        [user.id]
+      );
+      const groupIds = [...new Set(memberRows.map((row) => row.group_id).filter(Boolean))];
       if (groupIds.length === 0) {
         return res.status(200).json([]);
       }
 
-      const { data: marketRows, error: marketErr } = await supabaseAdmin
-        .from('markets')
-        .select('*')
-        .in('group_id', groupIds)
-        .order('created_at', { ascending: false });
-      if (marketErr) throw marketErr;
-
-      const markets = await attachPredictionCounts(marketRows || []);
+      const { rows: marketRows } = await query(
+        'SELECT * FROM markets WHERE group_id = ANY($1) ORDER BY created_at DESC',
+        [groupIds]
+      );
+      const markets = await attachPredictionCounts(marketRows);
       return res.status(200).json(markets);
     } catch (err) {
       console.error(err);

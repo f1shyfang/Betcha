@@ -1,6 +1,6 @@
-const { requireSupabaseAdmin } = require('./supabaseAdmin');
+const { query } = require('./db');
 
-// Shared resolve market logic — used by both Express app and Vercel serverless function
+// Shared resolve market logic — used by both the Vercel serverless function and tests.
 const handleResolve = async (deps) => {
   const { marketId, outcome, method = 'creator', reason = '', idempKey, getIdempotentResponse, storeIdempotentResponse, userId } = deps;
 
@@ -8,52 +8,41 @@ const handleResolve = async (deps) => {
     const prior = await getIdempotentResponse(idempKey);
     if (prior) return { status: 200, body: prior };
 
-    const supabase = requireSupabaseAdmin();
-
-    const { data: marketRows, error: marketErr } = await supabase
-      .from('markets')
-      .select('id,group_id,state')
-      .eq('id', marketId)
-      .limit(1);
-    if (marketErr) throw marketErr;
-
-    const market = marketRows?.[0];
+    const { rows: marketRows } = await query(
+      'SELECT id, group_id, state FROM markets WHERE id = $1 LIMIT 1',
+      [marketId]
+    );
+    const market = marketRows[0];
     if (!market) return { status: 404, body: { error: 'market not found' } };
     if (market.state !== 'open') return { status: 409, body: { error: 'market not open' } };
 
-    const { data: memberRows, error: memberErr } = await supabase
-      .from('group_members')
-      .select('role')
-      .eq('group_id', market.group_id)
-      .eq('user_id', userId)
-      .limit(1);
-    if (memberErr) throw memberErr;
-    if (!memberRows || memberRows.length === 0) return { status: 403, body: { error: 'forbidden' } };
+    const { rows: memberRows } = await query(
+      'SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2 LIMIT 1',
+      [market.group_id, userId]
+    );
+    if (memberRows.length === 0) return { status: 403, body: { error: 'forbidden' } };
 
-    const { error: rpcError } = await supabase.rpc('market_resolve_with_ledger', {
-      p_market_id: marketId,
-      p_resolver_id: userId || null,
-      p_outcome: outcome,
-      p_method: method,
-      p_reason: reason,
-    });
-
-    if (rpcError) {
+    try {
+      await query(
+        'SELECT market_resolve_with_ledger($1, $2, $3, $4, $5)',
+        [marketId, userId || null, outcome, method, reason]
+      );
+    } catch (rpcError) {
+      // 42883 = undefined_function (migration not applied)
       if (rpcError.code === '42883') {
         return { status: 503, body: { error: 'migration_pending', hint: 'apply 003_market_resolve_rpc.sql' } };
       }
       throw rpcError;
     }
 
-    const { data: settlementRows, error: settlementErr } = await supabase
-      .from('ledger_entries')
-      .select('user_id,delta,reason')
-      .eq('market_id', marketId);
-    if (settlementErr) throw settlementErr;
+    const { rows: settlementRows } = await query(
+      'SELECT user_id, delta, reason FROM ledger_entries WHERE market_id = $1',
+      [marketId]
+    );
 
     const myBreakdown = {};
     let myDelta = 0;
-    for (const row of settlementRows || []) {
+    for (const row of settlementRows) {
       if (row.user_id !== userId) continue;
       myBreakdown[row.reason] = (myBreakdown[row.reason] || 0) + (row.delta || 0);
       myDelta += row.delta || 0;

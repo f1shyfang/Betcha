@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import supabase from '../../lib/supabase';
+import { authClient } from '../../lib/authClient';
 import Head from 'next/head';
 import Link from 'next/link';
 
@@ -22,12 +22,10 @@ export default function GroupsIndex() {
 
   const fetchGroups = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return router.push('/');
+      const { data: sess } = await authClient.getSession();
+      if (!sess?.session) return router.push('/');
 
-      const res = await fetch('/api/groups', {
-        headers: { Authorization: `Bearer ${session.access_token}` }
-      });
+      const res = await fetch('/api/groups');
       if (res.ok) {
         const data = await res.json();
         setGroups(data);
@@ -45,16 +43,15 @@ export default function GroupsIndex() {
     setCreating(true);
     setCreateError('');
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const { data: sess } = await authClient.getSession();
+      if (!sess?.session) {
         router.push('/login');
         return;
       }
       const res = await fetch('/api/groups', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}` 
+        headers: {
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ name: newGroupName.trim() })
       });
@@ -82,8 +79,8 @@ export default function GroupsIndex() {
     setJoinMessage('');
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const { data: sess } = await authClient.getSession();
+      if (!sess?.session) {
         router.push('/login');
         return;
       }
@@ -91,8 +88,7 @@ export default function GroupsIndex() {
       const res = await fetch('/api/groups/join', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ token: inviteToken.trim() })
       });

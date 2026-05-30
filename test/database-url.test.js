@@ -1,36 +1,36 @@
-async function main() {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Connectivity check against the configured Postgres (Neon).
+// Run: node --env-file=.env.local test/database-url.test.js
 
-  if (!supabaseUrl || !serviceRoleKey) {
-    console.error('FAIL: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set');
+const { Client } = require('pg');
+
+async function main() {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    console.error('FAIL: DATABASE_URL is not set');
     process.exit(1);
   }
 
+  const needsSsl = /neon\.tech|sslmode=require/i.test(connectionString);
+  const client = new Client({
+    connectionString,
+    ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+  });
+
   try {
-    const response = await fetch(`${supabaseUrl}/rest/v1/users?select=id&limit=1`, {
-      headers: {
-        apikey: serviceRoleKey,
-        Authorization: `Bearer ${serviceRoleKey}`,
-      },
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      console.error('FAIL: Supabase REST connection failed');
-      console.error(`Status: ${response.status}`);
-      console.error(body);
+    await client.connect();
+    const { rows } = await client.query('SELECT 1 AS ok');
+    if (rows[0]?.ok === 1) {
+      console.log('PASS: Postgres connection successful');
+    } else {
+      console.error('FAIL: unexpected query result');
       process.exitCode = 1;
-      return;
     }
-
-    const rows = await response.json();
-    console.log('PASS: Supabase REST connection successful');
-    console.log(`Rows returned: ${Array.isArray(rows) ? rows.length : 0}`);
   } catch (err) {
-    console.error('FAIL: Supabase REST connection failed');
+    console.error('FAIL: Postgres connection failed');
     console.error(err.message);
     process.exitCode = 1;
+  } finally {
+    await client.end();
   }
 }
 

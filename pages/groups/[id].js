@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import supabase from '../../lib/supabase';
+import { authClient } from '../../lib/authClient';
 import Head from 'next/head';
 import Link from 'next/link';
 import { createMarket as createMarketApi } from '../../lib/api';
@@ -25,21 +25,17 @@ export default function GroupDetail() {
 
   const fetchGroup = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return router.push('/');
+      const { data: sess } = await authClient.getSession();
+      if (!sess?.session) return router.push('/');
 
-      const groupsRes = await fetch('/api/groups', {
-        headers: { Authorization: `Bearer ${session.access_token}` }
-      });
+      const groupsRes = await fetch('/api/groups');
       if (groupsRes.ok) {
         const groupsData = await groupsRes.json();
         const currentGroup = groupsData.find((g) => String(g.id) === String(id));
         setGroup(currentGroup || null);
       }
 
-      const res = await fetch(`/api/markets?group_id=${id}`, {
-        headers: { Authorization: `Bearer ${session.access_token}` }
-      });
+      const res = await fetch(`/api/markets?group_id=${id}`);
       if (res.ok) {
         const data = await res.json();
         setMarkets(data);
@@ -53,11 +49,9 @@ export default function GroupDetail() {
 
   const fetchLeaderboard = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const res = await fetch(`/api/groups/${id}/leaderboard`, {
-        headers: { Authorization: `Bearer ${session.access_token}` }
-      });
+      const { data: sess } = await authClient.getSession();
+      if (!sess?.session) return;
+      const res = await fetch(`/api/groups/${id}/leaderboard`);
       if (res.ok) {
         const data = await res.json();
         setLeaderboard(data);
@@ -68,10 +62,8 @@ export default function GroupDetail() {
   };
 
   const createInvite = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch(`/api/groups/${id}/invites`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${session.access_token}` }
+      method: 'POST'
     });
     if (res.ok) {
       const data = await res.json();

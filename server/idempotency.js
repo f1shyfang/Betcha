@@ -1,26 +1,22 @@
-const { requireSupabaseAdmin } = require('./supabaseAdmin');
+const { query } = require('./db');
 
 async function getIdempotentResponse(key) {
   if (!key) return null;
-  const supabase = requireSupabaseAdmin();
-  const { data, error } = await supabase
-    .from('idempotency_keys')
-    .select('response')
-    .eq('key', key)
-    .limit(1);
-
-  if (error) throw error;
-  return data?.[0]?.response || null;
+  const { rows } = await query(
+    'SELECT response FROM idempotency_keys WHERE key = $1 LIMIT 1',
+    [key]
+  );
+  return rows[0]?.response || null;
 }
 
 async function storeIdempotentResponse(key, response) {
   if (!key) return;
-  const supabase = requireSupabaseAdmin();
-  const { error } = await supabase
-    .from('idempotency_keys')
-    .upsert({ key, response }, { onConflict: 'key' });
-
-  if (error) throw error;
+  await query(
+    `INSERT INTO idempotency_keys (key, response)
+     VALUES ($1, $2)
+     ON CONFLICT (key) DO UPDATE SET response = EXCLUDED.response`,
+    [key, response]
+  );
 }
 
 module.exports = { getIdempotentResponse, storeIdempotentResponse };

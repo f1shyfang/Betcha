@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import supabase from '../../lib/supabase';
+import { authClient } from '../../lib/authClient';
 import Head from 'next/head';
 import Link from 'next/link';
 
@@ -21,12 +21,10 @@ export default function MarketsIndex() {
 
   const fetchMarkets = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return router.push('/');
+      const { data } = await authClient.getSession();
+      if (!data?.session) return router.push('/');
 
-      const res = await fetch('/api/markets', {
-        headers: { Authorization: `Bearer ${session.access_token}` }
-      });
+      const res = await fetch('/api/markets');
       if (res.ok) {
         const data = await res.json();
         setMarkets(data);
@@ -40,12 +38,10 @@ export default function MarketsIndex() {
 
   const fetchGroups = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const { data: sess } = await authClient.getSession();
+      if (!sess?.session) return;
 
-      const res = await fetch('/api/groups', {
-        headers: { Authorization: `Bearer ${session.access_token}` }
-      });
+      const res = await fetch('/api/groups');
       if (res.ok) {
         const data = await res.json();
         setGroups(data);
@@ -66,8 +62,8 @@ export default function MarketsIndex() {
     setCreateError('');
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      const { data: sess } = await authClient.getSession();
+      if (!sess?.session) {
         router.push('/login');
         return;
       }
@@ -75,8 +71,7 @@ export default function MarketsIndex() {
       const res = await fetch('/api/markets', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           title: newMarketTitle.trim(),

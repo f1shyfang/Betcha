@@ -1,6 +1,6 @@
-const { getUserFromRequest } = require('../../../server/supabaseAuth');
-const { applyCors } = require('../../../server/cors');
-const { requireSupabaseAdmin } = require('../../../server/supabaseAdmin');
+import { getUserFromRequest } from '../../../lib/auth';
+import { applyCors } from '../../../server/cors';
+import { query } from '../../../server/db';
 
 export default async function handler(req, res) {
   if (applyCors(req, res)) return;
@@ -16,30 +16,26 @@ export default async function handler(req, res) {
   if (!token) return res.status(400).json({ error: 'token is required' });
 
   try {
-    const supabaseAdmin = requireSupabaseAdmin();
+    await query(
+      `INSERT INTO users (id, email) VALUES ($1, $2)
+       ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email`,
+      [user.id, user.email]
+    );
 
-    const { error: userErr } = await supabaseAdmin
-      .from('users')
-      .upsert({ id: user.id, email: user.email }, { onConflict: 'id' });
-    if (userErr) throw userErr;
-
-    const { data: inviteRows, error: inviteErr } = await supabaseAdmin
-      .from('invites')
-      .select('id,group_id')
-      .eq('token', token)
-      .gt('expires_at', new Date().toISOString())
-      .limit(1);
-    if (inviteErr) throw inviteErr;
-
-    const invite = inviteRows?.[0];
+    const { rows: inviteRows } = await query(
+      'SELECT id, group_id FROM invites WHERE token = $1 AND expires_at > now() LIMIT 1',
+      [token]
+    );
+    const invite = inviteRows[0];
     if (!invite) {
       return res.status(400).json({ error: 'invalid or expired token' });
     }
 
-    const { error: memberErr } = await supabaseAdmin
-      .from('group_members')
-      .upsert({ group_id: invite.group_id, user_id: user.id }, { onConflict: 'group_id,user_id' });
-    if (memberErr) throw memberErr;
+    await query(
+      `INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)
+       ON CONFLICT (group_id, user_id) DO NOTHING`,
+      [invite.group_id, user.id]
+    );
 
     return res.status(200).json({ group_id: invite.group_id });
   } catch (err) {
