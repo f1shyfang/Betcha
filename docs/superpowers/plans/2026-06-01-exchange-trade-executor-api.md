@@ -24,6 +24,15 @@
   - `positions.realized_pnl` is updated for display (via `applyFill`) but is **NOT** mirrored into the ledger — the cash flows above already are the P&L (double-counting bug otherwise).
   - A **sell** is validated against shares held: `sell_qty ≤ position.shares − (Σ open sell-order remaining_qty)`. Selling more than you hold = an attempt to open a short → **reject** with `short_not_allowed` (Plan 4).
 
+## Test-setup correction (applies to EVERY task below)
+
+`groups.id` is `uuid DEFAULT gen_random_uuid()` — you CANNOT insert a `uid()` string as a group id. In every `beforeAll`, declare `let GROUP;` and create the group letting the DB assign the id:
+```javascript
+const g = await query(`INSERT INTO groups (name, owner_id) VALUES ('g', $1) RETURNING id`, [/* owner user */]);
+GROUP = g.rows[0].id;
+```
+The task snippets below still show the old `const GROUP = uid(...)` + explicit-id insert for brevity — replace that pattern with the above in each test (as in `test/marketDetail.vitest.js`). `markets.id` is also uuid (use `RETURNING id`, which `createExchangeMarket` already does). `users.id` is `text`, so `uid()` is fine for users.
+
 ## Shared shapes (from Plan 1, unchanged)
 
 - RestingOrder `{ id, userId, side, price, qty, sequence }` (qty = remaining).
