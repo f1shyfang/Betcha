@@ -12,6 +12,7 @@ import {
   placeOrderBody,
 } from '../lib/exchangeView';
 import { shouldPoll } from '../lib/predictionForm';
+import ProMarketView from './ProMarketView';
 
 // ─── Sparkline ──────────────────────────────────────────────────────────────
 
@@ -708,6 +709,24 @@ export default function ExchangeMarket({ marketId, market }) {
   // submittingRef tracks whether an order is in-flight so the poll is suppressed
   const submittingRef = useRef(false);
 
+  // Pro view toggle — persisted to localStorage, off by default
+  const [proMode, setProMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('betcha.proView') === '1';
+    }
+    return false;
+  });
+
+  const toggleProMode = () => {
+    setProMode((prev) => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('betcha.proView', next ? '1' : '0');
+      }
+      return next;
+    });
+  };
+
   const fetchState = useCallback(async () => {
     try {
       const res = await fetch(`/api/markets/${marketId}/exchange-state`);
@@ -779,13 +798,70 @@ export default function ExchangeMarket({ marketId, market }) {
         className="market-detail-hero"
         style={{ marginBottom: '16px' }}
       >
-        <div className="market-detail-header">
+        <div className="market-detail-header" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <span
             className={`market-pill${market.state === 'open' ? ' live' : ''}`}
           >
             Exchange
             {market.state === 'open' ? ' · Live' : ''}
           </span>
+
+          {/* Pro mode toggle */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={proMode}
+            aria-label={proMode ? 'Pro view on — switch to standard view' : 'Pro view off — switch to pro view'}
+            onClick={toggleProMode}
+            onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleProMode(); } }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '3px 10px 3px 6px',
+              borderRadius: '999px',
+              border: '1px solid',
+              borderColor: proMode ? 'var(--primary)' : 'var(--border)',
+              background: proMode ? 'rgba(255,90,95,0.08)' : 'var(--surface)',
+              color: proMode ? '#E84D4D' : 'var(--muted)',
+              fontSize: '12px',
+              fontFamily: "'Cabinet Grotesk', sans-serif",
+              fontWeight: 700,
+              cursor: 'pointer',
+              letterSpacing: '0.04em',
+              transition: 'border-color 150ms ease, color 150ms ease, background 150ms ease',
+            }}
+          >
+            {/* Track + thumb */}
+            <span
+              aria-hidden="true"
+              style={{
+                display: 'inline-block',
+                width: 28,
+                height: 16,
+                borderRadius: 9999,
+                background: proMode ? '#FF5A5F' : 'var(--border)',
+                position: 'relative',
+                transition: 'background 150ms ease',
+                flexShrink: 0,
+              }}
+            >
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 2,
+                  left: proMode ? 13 : 2,
+                  width: 12,
+                  height: 12,
+                  borderRadius: '50%',
+                  background: '#fff',
+                  transition: 'left 150ms ease',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }}
+              />
+            </span>
+            Pro
+          </button>
         </div>
         <h1 className="market-detail-title">{market.title}</h1>
 
@@ -854,116 +930,123 @@ export default function ExchangeMarket({ marketId, market }) {
         )}
       </section>
 
-      {/* ── Two-column layout: ticket | panels ── */}
-      <div
-        className="exchange-layout"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.2fr)',
-          gap: '16px',
-          alignItems: 'start',
-        }}
-      >
-        {/* ─ Order Ticket ─ */}
-        <section
-          className="prediction-section"
-          aria-label="Order ticket"
-          style={{ padding: '20px' }}
-        >
-          <h2 className="section-title" style={{ marginBottom: '16px' }}>
-            Place Order
-          </h2>
-          <OrderTicket
-            marketId={marketId}
-            maxLeverage={maxLeverage}
-            onOrderSuccess={handleOrderSuccess}
-            submittingRef={submittingRef}
-          />
-        </section>
-
-        {/* ─ Tabs panel ─ */}
-        <div style={{ display: 'grid', gap: '12px' }}>
-          <Tabs active={activeTab} onChange={setActiveTab} />
-
-          <section
-            id={`panel-${activeTab.toLowerCase()}`}
-            role="tabpanel"
-            aria-labelledby={`tab-${activeTab.toLowerCase()}`}
-            className="prediction-section"
-            style={{ padding: '16px' }}
+      {/* ── Pro view or calm Layout C body ── */}
+      {proMode ? (
+        <ProMarketView marketId={marketId} market={market} />
+      ) : (
+        <>
+          {/* ── Two-column layout: ticket | panels ── */}
+          <div
+            className="exchange-layout"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.2fr)',
+              gap: '16px',
+              alignItems: 'start',
+            }}
           >
-            {activeTab === 'Book' && (
-              <OrderBook book={state?.book} />
-            )}
-
-            {activeTab === 'Position' && (
-              <PositionPanel myPosition={state?.myPosition} />
-            )}
-
-            {activeTab === 'Trades' && (
-              <div>
-                {state?.trades && state.trades.length > 0 ? (
-                  <ul
-                    style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: '2px' }}
-                    aria-label="Recent trades"
-                  >
-                    {[...state.trades].reverse().map((t, i) => (
-                      <li
-                        key={i}
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '1fr 1fr',
-                          gap: '4px',
-                          padding: '6px 8px',
-                          borderRadius: '6px',
-                          background: 'var(--surface-2)',
-                          fontFamily: "'Geist', sans-serif",
-                          fontVariantNumeric: 'tabular-nums',
-                          fontSize: '13px',
-                        }}
-                      >
-                        <span style={{ color: 'var(--ink)', fontWeight: 600 }}>{formatCents(t.price)}</span>
-                        <span style={{ textAlign: 'right', color: 'var(--muted)' }}>{t.qty} shares</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p style={{ color: 'var(--muted)', fontSize: '14px', margin: '16px 0' }}>
-                    No trades yet.
-                  </p>
-                )}
-              </div>
-            )}
-          </section>
-
-          {/* ─ Open Orders ─ */}
-          {state?.myOpenOrders && state.myOpenOrders.length > 0 && (
+            {/* ─ Order Ticket ─ */}
             <section
               className="prediction-section"
-              aria-label="Your open orders"
-              style={{ padding: '16px' }}
+              aria-label="Order ticket"
+              style={{ padding: '20px' }}
             >
-              <h3
-                className="section-title"
-                style={{ fontSize: '16px', marginBottom: '12px' }}
-              >
-                Your Open Orders
-              </h3>
-              <OpenOrders
-                orders={state.myOpenOrders}
-                onCancel={handleCancelOrder}
+              <h2 className="section-title" style={{ marginBottom: '16px' }}>
+                Place Order
+              </h2>
+              <OrderTicket
+                marketId={marketId}
+                maxLeverage={maxLeverage}
+                onOrderSuccess={handleOrderSuccess}
+                submittingRef={submittingRef}
               />
             </section>
-          )}
-        </div>
-      </div>
 
-      {/* ── Responsive: stack on mobile ── */}
-      <style>{`
-        @media (max-width: 680px) {
-          .exchange-layout { grid-template-columns: 1fr !important; }
-        }
-      `}</style>
+            {/* ─ Tabs panel ─ */}
+            <div style={{ display: 'grid', gap: '12px' }}>
+              <Tabs active={activeTab} onChange={setActiveTab} />
+
+              <section
+                id={`panel-${activeTab.toLowerCase()}`}
+                role="tabpanel"
+                aria-labelledby={`tab-${activeTab.toLowerCase()}`}
+                className="prediction-section"
+                style={{ padding: '16px' }}
+              >
+                {activeTab === 'Book' && (
+                  <OrderBook book={state?.book} />
+                )}
+
+                {activeTab === 'Position' && (
+                  <PositionPanel myPosition={state?.myPosition} />
+                )}
+
+                {activeTab === 'Trades' && (
+                  <div>
+                    {state?.trades && state.trades.length > 0 ? (
+                      <ul
+                        style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: '2px' }}
+                        aria-label="Recent trades"
+                      >
+                        {[...state.trades].reverse().map((t, i) => (
+                          <li
+                            key={i}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '1fr 1fr',
+                              gap: '4px',
+                              padding: '6px 8px',
+                              borderRadius: '6px',
+                              background: 'var(--surface-2)',
+                              fontFamily: "'Geist', sans-serif",
+                              fontVariantNumeric: 'tabular-nums',
+                              fontSize: '13px',
+                            }}
+                          >
+                            <span style={{ color: 'var(--ink)', fontWeight: 600 }}>{formatCents(t.price)}</span>
+                            <span style={{ textAlign: 'right', color: 'var(--muted)' }}>{t.qty} shares</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p style={{ color: 'var(--muted)', fontSize: '14px', margin: '16px 0' }}>
+                        No trades yet.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </section>
+
+              {/* ─ Open Orders ─ */}
+              {state?.myOpenOrders && state.myOpenOrders.length > 0 && (
+                <section
+                  className="prediction-section"
+                  aria-label="Your open orders"
+                  style={{ padding: '16px' }}
+                >
+                  <h3
+                    className="section-title"
+                    style={{ fontSize: '16px', marginBottom: '12px' }}
+                  >
+                    Your Open Orders
+                  </h3>
+                  <OpenOrders
+                    orders={state.myOpenOrders}
+                    onCancel={handleCancelOrder}
+                  />
+                </section>
+              )}
+            </div>
+          </div>
+
+          {/* ── Responsive: stack on mobile ── */}
+          <style>{`
+            @media (max-width: 680px) {
+              .exchange-layout { grid-template-columns: 1fr !important; }
+            }
+          `}</style>
+        </>
+      )}
     </div>
   );
 }
