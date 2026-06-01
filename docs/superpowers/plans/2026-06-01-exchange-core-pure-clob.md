@@ -856,4 +856,15 @@ These pure modules are the building blocks. Plan 2 will:
 - Expose `POST /api/markets/[id]/orders`, `DELETE /api/markets/[id]/orders/[orderId]`, and `GET /api/markets/[id]/exchange-state`.
 
 Do NOT use leverage > 1 in the executor until Plan 4; the margin/liquidation modules already support it.
+
+### Seam contracts the executor MUST honor (from the plan-1 final cross-module review)
+
+The pure modules are correct and composable, but they meet at a few seams that need explicit glue. Bake these into Plan 2/3/4 to avoid silent `NaN`/type errors:
+
+1. **`liquidation.js` input shape ≠ `Position` shape.** `positions.js` yields `{ shares, avgEntry, realizedPnl }`, but `bankruptcyPrice`/`liquidationPrice`/`mustLiquidate` expect `{ side: 'buy'|'sell', entry }`. Before any liquidation call, derive `side = position.shares > 0 ? 'buy' : 'sell'` and `entry = position.avgEntry`. **Skip the liquidation check entirely when `shares === 0`** (a flat position has no liquidation price; the naive mapping would wrongly treat it as a short).
+2. **Round realized P&L before persisting.** `positions.realized_pnl` is a DB `integer`, but `avgEntry` (and thus `realizedPnl`) can be fractional. `Math.round(position.realizedPnl)` before writing, or Postgres rejects the insert. Keep the unrounded value in-memory across successive `applyFill` calls; only round at the DB boundary so rounding error doesn't accumulate.
+3. **Fills don't carry `makerSide`.** A `Fill` is `{ price, qty, makerId, makerUserId }`. To fold a fill into the *maker's* position via `applyFill(makerPos, makerSide, fill.price, fill.qty)`, resolve `makerSide` from the in-memory resting order looked up by `fill.makerId` — keep a `Map<orderId, order>` of the book you matched against.
+4. **Carry the taker's leverage to the fill-time margin re-check.** Leverage lives on the order row (`orders.leverage`), not on fills or positions. Thread it from the incoming order into the `requiredMargin({ leverage })` re-validation at fill.
+5. **Bot driver must dedupe quote rungs (Plan 3).** `desiredQuotes` can emit two rungs that round to the same integer price near the 1/99 clamp boundaries (and a bid/ask collision if `spread === 0`). The driver should merge/dedupe by `(side, price)` before inserting orders.
+6. **Order-acceptance invariant for leverage (Plan 4).** At extreme leverage + extreme entry (e.g. `L=10, long@5`), the computed liquidation price can be ≥ the entry price — i.e. the position opens already past liquidation. The executor/order validation should reject orders where `liquidationPrice` is on the wrong side of `entry` (long: `liqPrice >= entry`; short: `liqPrice <= entry`).
 ```
