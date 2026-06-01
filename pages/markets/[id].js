@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { authClient } from '../../lib/authClient';
 import Head from 'next/head';
 import Link from 'next/link';
 import { resolveMarket } from '../../lib/api';
+import { predictionErrorMessage, stablePredictionKey, applyOptimisticPrediction, shouldPoll, resolveSummary, clampStake, stakePresets, stakeValidationMessage, shareText, inviteText } from '../../lib/predictionForm';
 
 export default function MarketDetail() {
   const router = useRouter();
@@ -26,13 +27,47 @@ export default function MarketDetail() {
   const [evidenceImageUrl, setEvidenceImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [resolving, setResolving] = useState(false);
+  const [resolveOpen, setResolveOpen] = useState(false); // resolve form disclosure
+  const [pendingResolve, setPendingResolve] = useState(null); // true | false | null — awaiting confirm
+  const [pendingChoice, setPendingChoice] = useState(null); // true | false | null — awaiting confirm
+  const pendingChoiceRef = useRef(null); // mirror of pendingChoice for the polling interval
+  const [placing, setPlacing] = useState(false);
+  const [predictError, setPredictError] = useState('');
+  const [resolveError, setResolveError] = useState('');
+  const [uploadError, setUploadError] = useState('');
+  const [supportError, setSupportError] = useState('');
+
+  useEffect(() => {
+    pendingChoiceRef.current = pendingChoice;
+  }, [pendingChoice]);
+
+  // Keep the stake within the user's balance once it loads (default may exceed it).
+  useEffect(() => {
+    if (market?.my_balance != null) {
+      setStakePoints((s) => clampStake(s, market.my_balance));
+    }
+  }, [market?.my_balance]);
 
   useEffect(() => {
     if (!id) return;
     fetchMarket();
     fetchPredictionStats();
-    const timer = setInterval(fetchPredictionStats, 5000);
-    return () => clearInterval(timer);
+    // Poll only when the tab is visible and the user isn't mid-decision, so we
+    // don't burn requests in background tabs or reflow the odds bar under them.
+    const timer = setInterval(() => {
+      if (shouldPoll(document.hidden, pendingChoiceRef.current !== null)) {
+        fetchPredictionStats();
+      }
+    }, 5000);
+    // Refresh immediately when the tab regains focus (it may be stale).
+    const onVisible = () => {
+      if (!document.hidden) fetchPredictionStats();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [id]);
 
   const fetchMarket = async () => {
@@ -75,29 +110,71 @@ export default function MarketDetail() {
     }
   };
 
-  const placePrediction = async (choice) => {
-    const { data: sess } = await authClient.getSession();
-    const idempKey = `pred-${id}-${sess?.user?.id}-${Date.now()}`;
-    const res = await fetch(`/api/markets/${id}/predictions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'idempotency-key': idempKey
-      },
-      body: JSON.stringify({ choice, stake_points: stakePoints })
-    });
-    if (!res.ok) {
-      const payload = await res.json().catch(() => ({}));
-      alert(payload.error || 'Failed to place prediction');
-      return;
+  // Tapping YES/NO arms a confirmation rather than committing points immediately.
+  const requestPrediction = (choice) => {
+    setPredictError('');
+    setPendingChoice(choice);
+  };
+
+  const confirmPrediction = async () => {
+    if (pendingChoice === null) return;
+    const choice = pendingChoice;
+    setPredictError('');
+    setPlacing(true);
+    try {
+      const { data: sess } = await authClient.getSession();
+      if (!sess?.session) {
+        setPredictError('Your session expired. Please sign in again.');
+        return;
+      }
+      const res = await fetch(`/api/markets/${id}/predictions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Stable key so a rapid double-tap collapses to one prediction.
+          'idempotency-key': stablePredictionKey(id, sess.user.id, choice, stakePoints),
+        },
+        body: JSON.stringify({ choice, stake_points: stakePoints }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        setPredictError(predictionErrorMessage(res.status, payload));
+        return;
+      }
+      // Reflect the prediction instantly, then reconcile with the server — no
+      // full page reload (which re-ran the skeleton and lost scroll/focus).
+      const next = applyOptimisticPrediction(
+        { yesCount, noCount, myBalance: market?.my_balance ?? 0 },
+        choice,
+        stakePoints
+      );
+      setYesCount(next.yesCount);
+      setNoCount(next.noCount);
+      setMyPrediction(next.myPrediction);
+      setMarket((prev) =>
+        prev
+          ? {
+              ...prev,
+              my_prediction: { choice: next.myPrediction, stake_points: next.myStake },
+              my_balance: next.myBalance,
+            }
+          : prev
+      );
+      setPendingChoice(null);
+      fetchMarket();
+      fetchPredictionStats();
+    } catch (e) {
+      setPredictError("Couldn't place your prediction. Try again.");
+    } finally {
+      setPlacing(false);
     }
-    router.reload();
   };
 
   const uploadEvidenceImage = async (file) => {
+    setUploadError('');
     const { data: sess } = await authClient.getSession();
     if (!sess?.session) {
-      alert('Please sign in again.');
+      setUploadError('Your session expired. Please sign in again.');
       return;
     }
     setUploadingImage(true);
@@ -133,6 +210,7 @@ export default function MarketDetail() {
       setEvidenceImageUrl(fileUrl);
     } catch (e) {
       console.error('Evidence image upload failed', e);
+      setUploadError(e.message || "Couldn't upload that image. Try again.");
     } finally {
       setUploadingImage(false);
     }
@@ -140,9 +218,16 @@ export default function MarketDetail() {
 
   const askSupportChatbot = async () => {
     if (!supportInput.trim()) return;
+    setSupportError('');
     const { data: sess } = await authClient.getSession();
     if (!sess?.session) {
-      alert('Please sign in again.');
+      setSupportError('Your session expired. Please sign in again.');
+      return;
+    }
+    // The note is written for a specific outcome, so the creator must pick a
+    // side first — otherwise the suggestion would argue for the wrong result.
+    if (pendingResolve === null) {
+      setSupportError('Pick Resolve YES or NO first, then I can help write the note.');
       return;
     }
     const userMessage = supportInput.trim();
@@ -158,7 +243,7 @@ export default function MarketDetail() {
         body: JSON.stringify({
           message: userMessage,
           marketTitle: market?.title,
-          outcome: true,
+          outcome: pendingResolve,
           evidenceImageUrl,
         }),
       });
@@ -172,37 +257,50 @@ export default function MarketDetail() {
         setResolveReason((prev) => (prev ? `${prev}\n${reply}` : reply));
       }
     } catch (e) {
-      alert(e.message || 'Support chatbot failed');
+      setSupportError(e.message || "Support chat didn't respond. Try again.");
     } finally {
       setSupportLoading(false);
     }
   };
 
   const handleResolve = async (outcome) => {
+    setResolveError('');
     setResolving(true);
     try {
       await resolveMarket(id, outcome, 'creator', resolveReason, evidenceImageUrl);
-      router.reload();
+      // Reconcile in place instead of a hard reload.
+      await Promise.all([fetchMarket(), fetchPredictionStats()]);
+      setPendingResolve(null);
+      setResolveOpen(false);
     } catch (e) {
-      alert(e.message);
+      setResolveError(e.message || "Couldn't resolve the market. Try again.");
     } finally {
       setResolving(false);
     }
   };
 
-  const handleShare = async () => {
-    const outcome = market.resolution.outcome;
-    const text = `Outcome: ${outcome ? 'YES' : 'NO'} — ${market.title}`;
-    try {
-      await navigator.share({ title: market.title, text });
-    } catch (err) {
-      if (err.name !== 'AbortError') {
-        await navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+  // Web Share where supported (mostly mobile); fall back to clipboard on desktop.
+  const shareOrCopy = async (text) => {
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({ title: market.title, text });
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return; // user dismissed the sheet
       }
     }
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (e) {
+      // Clipboard unavailable (e.g. insecure context) — nothing more we can do.
+    }
   };
+
+  const handleShare = () => shareOrCopy(shareText(market.title, market.resolution.outcome));
+  const handleInvite = () =>
+    shareOrCopy(inviteText(market.title, typeof window !== 'undefined' ? window.location.href : ''));
 
   if (loading) {
     return (
@@ -243,6 +341,8 @@ export default function MarketDetail() {
   const settlementEntries = Object.entries(settlement.breakdown || {});
   const myBalance = market.my_balance ?? 0;
   const myStake = market.my_prediction?.stake_points ?? 0;
+  const stakeError = stakeValidationMessage(stakePoints, myBalance);
+  const presets = stakePresets(myBalance);
 
   return (
     <div className="page">
@@ -261,25 +361,45 @@ export default function MarketDetail() {
 
         <section className="market-detail-hero">
           <div className="market-detail-header">
-            <span className={`market-pill ${market.state === 'open' ? 'live' : ''}`}>{market.state}</span>
+            <span className={`market-pill ${market.state === 'open' ? 'live' : ''}`}>
+              {market.state === 'open' ? 'Open' : market.state === 'resolved' ? 'Resolved' : market.state}
+            </span>
+            {market.state === 'open' && (
+              <button
+                type="button"
+                className="button button-ghost button-sm"
+                style={{ marginLeft: 'auto' }}
+                onClick={handleInvite}
+              >
+                {copied ? 'Link copied!' : 'Share market'}
+              </button>
+            )}
           </div>
           <h1 className="market-detail-title">{market.title}</h1>
 
           <div className="odds-display" aria-live="polite">
-            <div className="odds-bar">
-              <div className="odds-fill odds-fill-yes" style={{ width: `${yesPct}%` }} />
-              <div className="odds-fill odds-fill-no" style={{ width: `${noPct}%` }} />
-            </div>
-            <div className="odds-labels">
-              <div className="odds-label odds-yes">
-                <strong>{yesPct}%</strong>
-                <span>YES ({yesCount})</span>
+            {total === 0 ? (
+              <div className="odds-empty">
+                <strong>No predictions yet</strong>
+                <span>{market.state === 'open' ? 'Be the first to take a side.' : 'Nobody weighed in on this one.'}</span>
               </div>
-              <div className="odds-label odds-no" style={{ textAlign: 'right' }}>
-                <strong>{noPct}%</strong>
-                <span>NO ({noCount})</span>
-              </div>
-            </div>
+            ) : (
+              <>
+                <div className="odds-bar">
+                  <div className="odds-fill odds-fill-yes" style={{ transform: `scaleX(${yesPct / 100})` }} />
+                </div>
+                <div className="odds-labels">
+                  <div className="odds-label odds-yes">
+                    <strong>{yesPct}%</strong>
+                    <span>YES ({yesCount})</span>
+                  </div>
+                  <div className="odds-label odds-no" style={{ textAlign: 'right' }}>
+                    <strong>{noPct}%</strong>
+                    <span>NO ({noCount})</span>
+                  </div>
+                </div>
+              </>
+            )}
             <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
               Last updated:{' '}
               {lastUpdatedAt
@@ -287,20 +407,8 @@ export default function MarketDetail() {
                 : '...'}
             </div>
             {myPrediction !== null && (
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 14px',
-                borderRadius: '999px',
-                fontSize: '13px',
-                fontWeight: 600,
-                background: myPrediction ? 'rgba(0,194,168,0.12)' : 'rgba(255,90,95,0.12)',
-                color: myPrediction ? '#0d6b60' : '#8c2727',
-                border: `1px solid ${myPrediction ? 'rgba(0,194,168,0.25)' : 'rgba(255,90,95,0.25)'}`,
-                width: 'fit-content',
-              }}>
-                Your prediction: {myPrediction ? 'YES ✓' : 'NO ✓'} {myStake > 0 ? `· Stake ${myStake}` : ''}
+              <div className={`choice-pill ${myPrediction ? 'choice-yes' : 'choice-no'}`}>
+                Your prediction: {myPrediction ? 'YES ✓' : 'NO ✓'}{myStake > 0 ? ` · Stake ${myStake}` : ''}
               </div>
             )}
             <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
@@ -309,104 +417,175 @@ export default function MarketDetail() {
           </div>
         </section>
 
-        {market.state === 'open' && myPrediction === null && (
+        {market.state === 'open' && (
           <section className="prediction-section" style={{ marginTop: '24px' }}>
-            <h2 className="section-title">Place Your Prediction</h2>
-            <label className="label" style={{ marginBottom: '10px' }}>
-              Stake points
-              <input
-                type="number"
-                min="1"
-                max={Math.max(1, myBalance)}
-                step="1"
-                value={stakePoints}
-                onChange={(e) => setStakePoints(Number(e.target.value || 0))}
-              />
-            </label>
+            <h2 className="section-title">{myPrediction === null ? 'Place Your Prediction' : 'Your Prediction'}</h2>
+            {myPrediction === null && (
+              <div style={{ marginBottom: '10px' }}>
+                <label className="label">
+                  Stake points
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="1"
+                    max={Math.max(1, myBalance)}
+                    step="1"
+                    value={stakePoints}
+                    onChange={(e) => setStakePoints(clampStake(e.target.value, myBalance))}
+                    aria-invalid={!!stakeError}
+                    aria-describedby={stakeError ? 'stake-error' : undefined}
+                  />
+                </label>
+                {presets.length > 0 && (
+                  <div className="stake-presets" role="group" aria-label="Quick stake amounts">
+                    {presets.map((p) => (
+                      <button
+                        type="button"
+                        key={p.label}
+                        className={`stake-preset${stakePoints === p.value ? ' is-selected' : ''}`}
+                        aria-pressed={stakePoints === p.value}
+                        onClick={() => setStakePoints(clampStake(p.value, myBalance))}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {stakeError && (
+                  <div id="stake-error" className="message error" role="alert">{stakeError}</div>
+                )}
+              </div>
+            )}
             <div className="prediction-buttons">
-              <button className="button button-predict button-predict-yes" onClick={() => placePrediction(true)}>
-                YES
+              <button
+                type="button"
+                className={`button button-predict button-predict-yes${(myPrediction === true || pendingChoice === true) ? ' button-predict-active' : ''}`}
+                aria-pressed={myPrediction === true}
+                disabled={myPrediction !== null || placing || !!stakeError}
+                onClick={() => requestPrediction(true)}
+              >
+                <span aria-hidden="true">✓</span> YES
               </button>
-              <button className="button button-predict button-predict-no" onClick={() => placePrediction(false)}>
-                NO
+              <button
+                type="button"
+                className={`button button-predict button-predict-no${(myPrediction === false || pendingChoice === false) ? ' button-predict-active' : ''}`}
+                aria-pressed={myPrediction === false}
+                disabled={myPrediction !== null || placing || !!stakeError}
+                onClick={() => requestPrediction(false)}
+              >
+                <span aria-hidden="true">✗</span> NO
               </button>
             </div>
+
+            {myPrediction === null && pendingChoice !== null && (
+              <div className="prediction-confirm" role="group" aria-label="Confirm your prediction">
+                <span>
+                  Stake <strong>{stakePoints}</strong> on <strong>{pendingChoice ? 'YES' : 'NO'}</strong>?
+                </span>
+                <div className="prediction-confirm-actions">
+                  <button type="button" className="button button-secondary button-sm" disabled={placing} onClick={confirmPrediction}>
+                    {placing ? 'Placing…' : 'Confirm'}
+                  </button>
+                  <button type="button" className="button button-ghost button-sm" disabled={placing} onClick={() => setPendingChoice(null)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {predictError && (
+              <div className="message error" role="alert">
+                {predictError}{' '}
+                {pendingChoice !== null && !placing && (
+                  <button type="button" className="button button-ghost button-sm" onClick={confirmPrediction}>Retry</button>
+                )}
+              </div>
+            )}
           </section>
         )}
 
         {market.state === 'open' && (!market.creator_id || market.creator_id === currentUserId) && (
           <section className="resolve-section" style={{ marginTop: '24px' }}>
-            <h2 className="section-title" style={{ fontSize: '16px', color: 'var(--muted)' }}>Resolve Market</h2>
-            <label className="label">
-              Resolution reason
-              <input
-                type="text"
-                value={resolveReason}
-                onChange={(e) => setResolveReason(e.target.value)}
-                placeholder="Why this outcome is correct"
-              />
-            </label>
-            <label className="label">
-              Evidence image
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => {
-                  const file = e.target.files && e.target.files[0];
-                  if (file) uploadEvidenceImage(file);
-                }}
-              />
-            </label>
-            {uploadingImage && <p className="prediction-confirmation">Uploading image...</p>}
-            {evidenceImageUrl && (
-              <p className="prediction-confirmation">
-                Evidence uploaded: <a href={evidenceImageUrl} target="_blank" rel="noreferrer">view image</a>
-              </p>
+            <button
+              type="button"
+              className="resolve-disclosure"
+              aria-expanded={resolveOpen}
+              onClick={() => setResolveOpen((open) => !open)}
+            >
+              <span>Resolve this market</span>
+              <span aria-hidden="true">{resolveOpen ? '–' : '+'}</span>
+            </button>
+
+            {resolveOpen && (
+              <div className="resolve-body">
+                <label className="label">
+                  Resolution reason
+                  <input
+                    type="text"
+                    value={resolveReason}
+                    onChange={(e) => setResolveReason(e.target.value)}
+                    placeholder="Why this outcome is correct"
+                  />
+                </label>
+                <label className="label">
+                  Evidence image
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files && e.target.files[0];
+                      if (file) uploadEvidenceImage(file);
+                    }}
+                  />
+                </label>
+                {uploadingImage && <p className="prediction-confirmation">Uploading image...</p>}
+                {uploadError && <div className="message error" role="alert">{uploadError}</div>}
+                {evidenceImageUrl && (
+                  <p className="prediction-confirmation">
+                    Evidence uploaded: <a href={evidenceImageUrl} target="_blank" rel="noreferrer">view image</a>
+                  </p>
+                )}
+
+                {pendingResolve === null ? (
+                  <div className="prediction-buttons">
+                    <button type="button" className="button button-secondary" disabled={resolving} onClick={() => setPendingResolve(true)}>Resolve YES</button>
+                    <button type="button" className="button button-secondary" disabled={resolving} onClick={() => setPendingResolve(false)}>Resolve NO</button>
+                  </div>
+                ) : (
+                  <div className="prediction-confirm" role="group" aria-label="Confirm resolution">
+                    <span>{resolveSummary(total, pendingResolve)}</span>
+                    <div className="prediction-confirm-actions">
+                      <button type="button" className="button button-secondary button-sm" disabled={resolving} onClick={() => handleResolve(pendingResolve)}>
+                        {resolving ? 'Resolving…' : 'Confirm'}
+                      </button>
+                      <button type="button" className="button button-ghost button-sm" disabled={resolving} onClick={() => setPendingResolve(null)}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+                {resolveError && <div className="message error" role="alert">{resolveError}</div>}
+              </div>
             )}
-            <div className="prediction-buttons">
-              <button className="button button-secondary" disabled={resolving} onClick={() => handleResolve(true)}>Resolve YES</button>
-              <button className="button button-secondary" disabled={resolving} onClick={() => handleResolve(false)}>Resolve NO</button>
-            </div>
           </section>
         )}
 
         {isResolved && (
           <section style={{ marginTop: '24px' }}>
             <div className="resolution-banner">
-              <div style={{ fontSize: '28px', fontWeight: 700, fontFamily: "'Cabinet Grotesk', sans-serif", marginBottom: '12px' }}>
+              <div className="resolution-headline">
                 OUTCOME: {outcomeValue ? 'YES' : 'NO'}
               </div>
 
               {myCorrect !== null && (
-                <div style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 14px',
-                  borderRadius: '999px',
-                  fontSize: '15px',
-                  fontWeight: 700,
-                  background: myCorrect ? 'rgba(0,194,168,0.15)' : 'rgba(255,90,95,0.15)',
-                  color: myCorrect ? '#0d6b60' : '#8c2727',
-                  border: `1px solid ${myCorrect ? 'rgba(0,194,168,0.3)' : 'rgba(255,90,95,0.3)'}`,
-                  marginBottom: '16px',
-                }}>
+                <div className={`choice-pill ${myCorrect ? 'choice-yes' : 'choice-no'}`} style={{ marginBottom: '16px' }}>
                   {settlement.total_delta > 0 ? '+' : ''}{settlement.total_delta} points
                 </div>
               )}
 
               {settlementEntries.length > 0 && (
-                <div style={{ marginBottom: '16px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                <div className="chip-row">
                   {settlementEntries.map(([reason, delta]) => (
-                    <span key={reason} style={{
-                      padding: '4px 10px',
-                      borderRadius: '999px',
-                      background: 'rgba(18,20,23,0.06)',
-                      color: 'var(--text)',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                    }}>
-                      {reason.replace('_', ' ')}: {delta > 0 ? '+' : ''}{delta}
+                    <span key={reason} className="chip">
+                      {reason.replaceAll('_', ' ')}: {delta > 0 ? '+' : ''}{delta}
                     </span>
                   ))}
                 </div>
@@ -414,33 +593,15 @@ export default function MarketDetail() {
 
               {visibleWinners.length > 0 && (
                 <div style={{ marginBottom: '16px' }}>
-                  <div style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Winners
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  <div className="chip-group-label">Winners</div>
+                  <div className="chip-row" style={{ marginBottom: 0 }}>
                     {visibleWinners.map((p) => (
-                      <span key={p.user_id} style={{
-                        padding: '4px 10px',
-                        borderRadius: '999px',
-                        background: 'rgba(0,194,168,0.1)',
-                        color: '#0d6b60',
-                        fontSize: '13px',
-                        fontWeight: 600,
-                        border: '1px solid rgba(0,194,168,0.2)',
-                      }}>
+                      <span key={p.user_id} className="choice-pill choice-yes">
                         {p.display_name || p.user_id}
                       </span>
                     ))}
                     {extraWinners > 0 && (
-                      <Link href={`/groups/${market.group_id}`} style={{
-                        padding: '4px 10px',
-                        borderRadius: '999px',
-                        background: 'rgba(18,20,23,0.06)',
-                        color: 'var(--muted)',
-                        fontSize: '13px',
-                        fontWeight: 600,
-                        textDecoration: 'none',
-                      }}>
+                      <Link href={`/groups/${market.group_id}`} className="chip chip-link">
                         and {extraWinners} more →
                       </Link>
                     )}
@@ -499,6 +660,7 @@ export default function MarketDetail() {
               </div>
             ))}
           </div>
+          {supportError && <div className="message error" role="alert" style={{ margin: '0 16px' }}>{supportError}</div>}
           <div className="support-chat-compose">
             <input
               type="text"
