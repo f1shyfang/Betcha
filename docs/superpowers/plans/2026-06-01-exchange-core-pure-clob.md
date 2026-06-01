@@ -105,10 +105,14 @@ CREATE TABLE IF NOT EXISTS insurance_pool (
 COMMIT;
 ```
 
-- [ ] **Step 2: Apply the migration to the test branch**
+- [ ] **Step 2: Apply the migration to BOTH branches**
 
-Run: `npm run migrate`
-Expected: console prints `Applied migration 010_exchange_markets.sql` and `Migrations applied` with no error. (Migrations are idempotent via `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`.)
+The Vitest suite reads the **ci-perf-tests** branch (`.env.test.local`, loaded by `test/setup.js`), while `npm run migrate` targets the dev branch (`.env.local`). The schema test in Step 3 reads the test branch, so the migration must land there too. Apply to both:
+
+Run (dev branch): `npm run migrate`
+Run (test branch): `node --env-file=.env.test.local server/migrations/run_migrations.js`
+
+Expected (each): console prints `Applied migration 010_exchange_markets.sql` and `Migrations applied` with no error. (Migrations are idempotent via `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`, so re-applying the older migrations is harmless.)
 
 - [ ] **Step 3: Write the failing schema-verification test**
 
