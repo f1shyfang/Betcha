@@ -9,6 +9,23 @@ const { applyFill } = require('./positions');
 const { positionMargin } = require('./positionMargin');
 const { liquidationPrice } = require('./liquidation');
 
+// Effective leverage of the RESULTING position: opening, adding to, or flipping
+// into a position takes the new order's leverage; a pure same-side reduction
+// keeps the position's prior leverage; flat is irrelevant.
+function effectiveLeverage(beforeShares, beforeLev, afterShares, orderLev) {
+  if (afterShares === 0) return 1;
+  const flipped = beforeShares !== 0 && Math.sign(afterShares) !== Math.sign(beforeShares);
+  const increased = Math.abs(afterShares) > Math.abs(beforeShares);
+  return (flipped || increased) ? orderLev : beforeLev;
+}
+// True when the order opens, increases, or flips the position (a NEW exposure
+// that must be margin-checked and liquidation-validated). False for pure reduces.
+function isOpeningOrIncreasing(beforeShares, afterShares) {
+  if (afterShares === 0) return false;
+  const flipped = beforeShares !== 0 && Math.sign(afterShares) !== Math.sign(beforeShares);
+  return flipped || Math.abs(afterShares) > Math.abs(beforeShares);
+}
+
 async function loadPosition(q, marketId, userId) {
   const { rows } = await q(
     `SELECT shares, avg_entry, realized_pnl, leverage FROM positions WHERE market_id=$1 AND user_id=$2`,
@@ -67,16 +84,17 @@ async function placeOrder(input, deps) {
       }
       const before = await loadPosition(q, marketId, userId);
       const after = applyFill({ shares: before.shares, avgEntry: before.avgEntry, realizedPnl: 0 }, side, price, qty);
+      const effLevCheck = effectiveLeverage(before.shares, before.leverage, after.shares, leverage);
       const marginBefore = positionMargin({ shares: before.shares, avgEntry: before.avgEntry, leverage: before.leverage });
-      const marginAfter = positionMargin({ shares: after.shares, avgEntry: after.avgEntry, leverage });
+      const marginAfter = positionMargin({ shares: after.shares, avgEntry: after.avgEntry, leverage: effLevCheck });
       const deltaMargin = marginAfter - marginBefore;
       if (deltaMargin > 0) {
         const cash = await availableCashTx(q, userId);
         if (deltaMargin > cash) { await q('ROLLBACK'); return { status: 'error', error: 'insufficient_margin' }; }
       }
-      if (after.shares !== 0 && Math.abs(after.shares) > Math.abs(before.shares)) {
+      if (isOpeningOrIncreasing(before.shares, after.shares)) {
         const posSide = after.shares > 0 ? 'buy' : 'sell';
-        const liq = liquidationPrice({ side: posSide, entry: after.avgEntry, leverage, maintenanceMargin: maint });
+        const liq = liquidationPrice({ side: posSide, entry: after.avgEntry, leverage: effLevCheck, maintenanceMargin: maint });
         const bad = posSide === 'buy' ? (liq >= after.avgEntry) : (liq <= after.avgEntry);
         if (bad) { await q('ROLLBACK'); return { status: 'error', error: 'leverage_too_high' }; }
       }
@@ -142,12 +160,10 @@ async function placeOrder(input, deps) {
       if (d !== 0) await q(`INSERT INTO ledger_entries (user_id, market_id, delta, reason) VALUES ($1,$2,$3,'realized_pnl')`, [mUser, marketId, d]);
     }
 
-    // Effective position leverage: keep prior leverage when reducing; use the
-    // order's leverage only when opening/increasing the position.
-    const takerEffLev = Math.abs(takerPos.shares) > Math.abs(takerSharesBefore) ? lev : takerLevBefore;
+    const takerEffLev = effectiveLeverage(takerSharesBefore, takerLevBefore, takerPos.shares, lev);
     await savePosition(q, marketId, userId, takerPos, takerEffLev);
     for (const [mUser, mPos] of makerPos) {
-      const effLev = Math.abs(mPos.shares) > Math.abs(makerSharesBefore.get(mUser)) ? makerOrderLev.get(mUser) : makerLevBefore.get(mUser);
+      const effLev = effectiveLeverage(makerSharesBefore.get(mUser), makerLevBefore.get(mUser), mPos.shares, makerOrderLev.get(mUser));
       await savePosition(q, marketId, mUser, mPos, effLev);
     }
 
@@ -164,4 +180,4 @@ async function placeOrder(input, deps) {
   }
 }
 
-module.exports = { placeOrder };
+module.exports = { placeOrder, effectiveLeverage, isOpeningOrIncreasing };

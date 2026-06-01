@@ -91,6 +91,94 @@ describe('placeOrder', () => {
     expect(rows[0].shares).toBe(10);
   });
 
+  // --- Regression: reduce with different leverage falsely rejected (bug #1) ---
+  it('reduce order with lower leverage is accepted even with little spare cash', async () => {
+    // Seed a user who is long 10@50 at leverage 5.  Their margin_posted is 100
+    // (ceil(50*10/5)=100).  We give them starting_points=150 so free cash is
+    // only 50 after the position margin is subtracted.
+    // A sell of 5 at price 70 (above any likely book bid so it rests) is a
+    // pure reduce.  With the bug the pre-check computes marginAfter using the
+    // order's leverage (1), which gives ceil(70*5/1)=350 for the hypothetical
+    // SHORT that would result if executed, versus the prior marginBefore=100,
+    // a delta of +250 — wrongly failing the cash check.
+    // With the fix, effectiveLeverage sees a reduce → keeps lev=5, so
+    // marginAfter = ceil(50*5/5)=50, delta = 50-100 = -50 (<= 0) → no cash check.
+    const reduceUser = uid('ex-reduce');
+    await query(
+      `INSERT INTO users (id, email, starting_points) VALUES ($1,$2,150) ON CONFLICT (id) DO NOTHING`,
+      [reduceUser, `${reduceUser}@t.internal`]
+    );
+    // Seed position: long 10@50 leverage 5, margin_posted=100
+    await query(
+      `INSERT INTO positions (market_id, user_id, shares, avg_entry, leverage, margin_posted)
+       VALUES ($1,$2,10,50,5,100)
+       ON CONFLICT (market_id, user_id) DO UPDATE SET shares=10, avg_entry=50, leverage=5, margin_posted=100`,
+      [marketId, reduceUser]
+    );
+    // Place a resting sell (reduce) at 70 — well above any best bid, so it rests.
+    // Use leverage=1 (the order's leverage), which used to trigger the false rejection.
+    const res = await placeOrder(
+      { marketId, userId: reduceUser, side: 'sell', price: 70, qty: 5, type: 'limit', leverage: 1 },
+      deps
+    );
+    expect(res.status).toBe('ok');
+  });
+
+  // --- Regression: flip long→short stores wrong leverage (bug #2) ---
+  it('flip long→short stores the order leverage, not the prior leverage', async () => {
+    // We set up: flipUser is long 10@60 at leverage 3, stored in DB.
+    // A bot rests bids at 60 so the flipUser SELL 15@60 will cross and fill
+    // 10 immediately (net position goes to -5, leverage should be 2=order's).
+    const flipUser = uid('ex-flip');
+    const flipBot = uid('ex-flip-bot');
+    await query(
+      `INSERT INTO users (id, email, starting_points) VALUES ($1,$2,100000),($3,$4,100000)
+       ON CONFLICT (id) DO NOTHING`,
+      [flipUser, `${flipUser}@t.internal`, flipBot, `${flipBot}@t.internal`]
+    );
+    // Dedicated market for this test.
+    const { marketId: flipMktId } = await createExchangeMarket(
+      { groupId: GROUP, creatorId: flipUser, title: 'flip leverage test' }, query
+    );
+    // Seed flipUser position: long 10@60 at leverage 3, margin_posted = ceil(60*10/3)=200
+    await query(
+      `INSERT INTO positions (market_id, user_id, shares, avg_entry, leverage, margin_posted)
+       VALUES ($1,$2,10,60,3,200)
+       ON CONFLICT (market_id, user_id) DO UPDATE SET shares=10, avg_entry=60, leverage=3, margin_posted=200`,
+      [flipMktId, flipUser]
+    );
+    // Bot rests a bid at 60 (allowShort so it can provide the other side).
+    await placeOrder(
+      { marketId: flipMktId, userId: flipBot, side: 'buy', price: 60, qty: 15, type: 'limit', allowShort: true },
+      deps
+    );
+    // flipUser sells 15@60 with leverage=2.  10 fills immediately (crosses bot bid),
+    // residual 5 rests as a short (or all 15 fill if bot had 15 qty).
+    // After fill: net = 10 - 15 = -5 (short 5).  Effective leverage should be 2.
+    const res = await placeOrder(
+      { marketId: flipMktId, userId: flipUser, side: 'sell', price: 60, qty: 15, type: 'limit', leverage: 2 },
+      deps
+    );
+    expect(res.status).toBe('ok');
+    expect(res.filledQty).toBeGreaterThan(0); // at least some fill happened
+
+    const { rows } = await query(
+      `SELECT shares, leverage FROM positions WHERE market_id=$1 AND user_id=$2`,
+      [flipMktId, flipUser]
+    );
+    expect(rows.length).toBe(1);
+    // Position must be short (or flat if bot only had enough for 10 — still net
+    // the remaining sell should be stored).  The key assertion: whenever the
+    // position is short (shares < 0) the leverage stored must be 2 (order's),
+    // not 3 (prior position's).
+    if (Number(rows[0].shares) < 0) {
+      expect(Number(rows[0].leverage)).toBe(2);
+    }
+    // Also verify the helper directly (unit coverage even if the fill is partial).
+    const { effectiveLeverage } = require('../server/exchange/executor');
+    expect(effectiveLeverage(10, 3, -5, 2)).toBe(2);
+  });
+
   it('handles a self-trade without corrupting the position (taker and maker are the same user)', async () => {
     const self = uid('ex-self');
     await query(`INSERT INTO users (id, email, starting_points) VALUES ($1,$2,100000) ON CONFLICT (id) DO NOTHING`, [self, `${self}@t.internal`]);
