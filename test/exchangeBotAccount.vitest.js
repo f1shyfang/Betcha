@@ -36,11 +36,12 @@ describe('placeOrder allowShort', () => {
     expect(rows.length === 0 || rows[0].shares === 0).toBe(true);
   });
 
-  it('still rejects a normal user selling with no inventory (allowShort defaults false)', async () => {
+  it('allows a normal user to short with sufficient margin (allowShort defaults false, humans may short)', async () => {
     const u = uid('bot-human');
     await query(`INSERT INTO users (id, email, starting_points) VALUES ($1,$2,100000) ON CONFLICT (id) DO NOTHING`, [u, `${u}@t.internal`]);
+    // Selling 10@55 with no inventory opens a short. Margin = ceil((100-55)*10/1) = 450.
+    // User has 100000 starting cash — sufficient.
     const res = await placeOrder({ marketId, userId: u, side: 'sell', price: 55, qty: 10, type: 'limit' }, { getClient });
-    expect(res.status).toBe('error');
-    expect(res.error).toBe('short_not_allowed');
+    expect(res.status).toBe('ok');
   });
 });

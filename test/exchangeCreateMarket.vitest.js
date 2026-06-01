@@ -23,7 +23,7 @@ describe('createExchangeMarket', () => {
     expect(m[0].mechanism).toBe('exchange');
     const { rows: c } = await query(`SELECT seed_price, max_leverage FROM market_exchange_config WHERE market_id=$1`, [marketId]);
     expect(c[0].seed_price).toBe(40);
-    expect(c[0].max_leverage).toBe(1);
+    expect(c[0].max_leverage).toBe(10);
   });
 
   it('defaults the seed price to 50 when omitted', async () => {

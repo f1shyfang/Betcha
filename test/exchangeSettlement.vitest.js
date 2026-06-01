@@ -46,12 +46,15 @@ describe('market_resolve_exchange', () => {
     const { rows: st } = await query(`SELECT state FROM markets WHERE id=$1`, [marketId]);
     expect(st[0].state).toBe('resolved');
 
+    // Margin model: P&L = (terminal - avg_entry) * shares
+    // BUYER long 10@60, YES (terminal=100): (100-60)*10 = +400
+    // Bot short -10@60, YES (terminal=100): (100-60)*(-10) = -400
     const { rows: buyerSettle } = await query(
       `SELECT COALESCE(SUM(delta),0)::int AS d FROM ledger_entries WHERE market_id=$1 AND user_id=$2 AND reason='settlement'`, [marketId, BUYER]);
     const { rows: botSettle } = await query(
       `SELECT COALESCE(SUM(delta),0)::int AS d FROM ledger_entries WHERE market_id=$1 AND user_id=$2 AND reason='settlement'`, [marketId, bot]);
-    expect(buyerSettle[0].d).toBe(1000);
-    expect(botSettle[0].d).toBe(-1000);
+    expect(buyerSettle[0].d).toBe(400);
+    expect(botSettle[0].d).toBe(-400);
 
     const { rows: total } = await query(
       `SELECT COALESCE(SUM(delta),0)::int AS d FROM ledger_entries WHERE market_id=$1 AND reason='settlement'`, [marketId]);
@@ -62,25 +65,35 @@ describe('market_resolve_exchange', () => {
 
     const { rows: buyerAfterRetry } = await query(
       `SELECT COALESCE(SUM(delta),0)::int AS d FROM ledger_entries WHERE market_id=$1 AND user_id=$2 AND reason='settlement'`, [marketId, BUYER]);
-    expect(buyerAfterRetry[0].d).toBe(1000); // must still be 1000, NOT 2000
+    expect(buyerAfterRetry[0].d).toBe(400); // must still be 400, NOT 800
 
     const { rows: totalAfterRetry } = await query(
       `SELECT COALESCE(SUM(delta),0)::int AS d FROM ledger_entries WHERE market_id=$1 AND reason='settlement'`, [marketId]);
     expect(totalAfterRetry[0].d).toBe(0); // market-wide settlement total still 0
   });
 
-  it('inserts zero settlement ledger rows on NO outcome (terminal=0 means no payouts)', async () => {
+  it('books non-zero settlement rows on NO outcome and the result is zero-sum', async () => {
     await query(`SELECT market_resolve_exchange($1,$2,$3,$4,$5)`, [marketIdNo, OWNER2, false, 'creator', '']);
 
     const { rows: st } = await query(`SELECT state FROM markets WHERE id=$1`, [marketIdNo]);
     expect(st[0].state).toBe('resolved');
 
-    // terminal=0 → (v_terminal * shares) = 0 for everyone → the guard filters all rows
-    const { rows: settlementRows } = await query(
-      `SELECT COUNT(*)::int AS n FROM ledger_entries WHERE market_id=$1 AND reason='settlement'`, [marketIdNo]);
-    expect(settlementRows[0].n).toBe(0);
+    // Margin model: P&L = (terminal - avg_entry) * shares
+    // BUYER2 long 10@60, NO (terminal=0): (0-60)*10 = -600
+    // Bot2 short -10@60, NO (terminal=0): (0-60)*(-10) = +600
+    const { rows: buyerSettle } = await query(
+      `SELECT COALESCE(SUM(delta),0)::int AS d FROM ledger_entries WHERE market_id=$1 AND user_id=$2 AND reason='settlement'`, [marketIdNo, BUYER2]);
+    const { rows: botSettle } = await query(
+      `SELECT COALESCE(SUM(delta),0)::int AS d FROM ledger_entries WHERE market_id=$1 AND user_id=$2 AND reason='settlement'`, [marketIdNo, bot2]);
+    expect(buyerSettle[0].d).toBe(-600);
+    expect(botSettle[0].d).toBe(600);
 
-    // Buyer's net ledger for the market is just the buy_fill debit (-600)
+    // Zero-sum: -600 + 600 = 0
+    const { rows: total } = await query(
+      `SELECT COALESCE(SUM(delta),0)::int AS d FROM ledger_entries WHERE market_id=$1 AND reason='settlement'`, [marketIdNo]);
+    expect(total[0].d).toBe(0);
+
+    // BUYER2's net ledger for the market: no buy_fill (margin model), just settlement -600
     const { rows: buyerNet } = await query(
       `SELECT COALESCE(SUM(delta),0)::int AS d FROM ledger_entries WHERE market_id=$1 AND user_id=$2`, [marketIdNo, BUYER2]);
     expect(buyerNet[0].d).toBe(-600);

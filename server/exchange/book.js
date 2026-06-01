@@ -6,7 +6,7 @@ const { query: defaultQuery } = require('../db');
 
 async function loadBook(marketId, q = defaultQuery) {
   const { rows } = await q(
-    `SELECT id, user_id, side, price, (quantity - filled_quantity) AS qty, sequence
+    `SELECT id, user_id, side, price, (quantity - filled_quantity) AS qty, sequence, leverage
      FROM orders
      WHERE market_id = $1 AND status IN ('open','partial')
      ORDER BY sequence ASC`,
@@ -16,7 +16,7 @@ async function loadBook(marketId, q = defaultQuery) {
   const asks = [];
   const byId = new Map();
   for (const r of rows) {
-    const order = { id: r.id, userId: r.user_id, side: r.side, price: r.price, qty: r.qty, sequence: Number(r.sequence) };
+    const order = { id: r.id, userId: r.user_id, side: r.side, price: r.price, qty: r.qty, sequence: Number(r.sequence), leverage: Number(r.leverage) };
     byId.set(order.id, order);
     (order.side === 'buy' ? bids : asks).push(order);
   }

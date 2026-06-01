@@ -15,7 +15,7 @@ beforeAll(async () => {
   const g = await query(`INSERT INTO groups (name, owner_id) VALUES ('g',$1) RETURNING id`, [SELLER]);
   GROUP = g.rows[0].id;
   ({ marketId } = await createExchangeMarket({ groupId: GROUP, creatorId: SELLER, title: 'executor test' }, query));
-  // Give SELLER a long inventory of 100 shares @ avg 50 so they can sell (no shorting in Plan 2).
+  // Give SELLER a long inventory of 100 shares @ avg 50 so they can sell without shorting.
   await query(`INSERT INTO positions (market_id, user_id, shares, avg_entry) VALUES ($1,$2,100,50)`, [marketId, SELLER]);
 });
 afterAll(async () => { await pool.end(); });
@@ -35,7 +35,8 @@ describe('placeOrder', () => {
     const res = await placeOrder({ marketId, userId: BUYER, side: 'buy', price: 63, qty: 4, type: 'limit' }, deps);
     expect(res.status).toBe('ok');
     expect(res.filledQty).toBe(4);
-    expect(await availableCash(BUYER, query)).toBe(before - 252); // 63*4
+    // Margin model lev=1: margin = ceil(63*4/1) = 252, same as old cash premium
+    expect(await availableCash(BUYER, query)).toBe(before - 252);
     const { rows } = await query(`SELECT shares, avg_entry FROM positions WHERE market_id=$1 AND user_id=$2`, [marketId, BUYER]);
     expect(rows[0].shares).toBe(4);
     expect(Number(rows[0].avg_entry)).toBe(63);
@@ -43,24 +44,51 @@ describe('placeOrder', () => {
     expect(s[0].shares).toBe(96);
   });
 
-  it('rejects a sell larger than the holder\'s sellable shares (no shorting in Plan 2)', async () => {
-    const res = await placeOrder({ marketId, userId: BUYER, side: 'sell', price: 10, qty: 999, type: 'limit' }, deps);
-    expect(res.status).toBe('error');
-    expect(res.error).toBe('short_not_allowed');
+  it('allows a human to open a short (no inventory required) when sufficient margin is available', async () => {
+    // Human sells 10@60 with no inventory — opens a short position.
+    // Margin required = ceil((100-60)*10/1) = 400; user has 100000 starting cash.
+    const shortSeller = uid('ex-short');
+    await query(`INSERT INTO users (id, email, starting_points) VALUES ($1,$2,100000) ON CONFLICT (id) DO NOTHING`,
+      [shortSeller, `${shortSeller}@t.internal`]);
+    const res = await placeOrder({ marketId, userId: shortSeller, side: 'sell', price: 10, qty: 10, type: 'limit' }, deps);
+    expect(res.status).toBe('ok');
   });
 
-  it('rejects a buy that exceeds available cash', async () => {
+  it('rejects a buy that exceeds available margin', async () => {
     const poor = uid('ex-poor');
     await query(`INSERT INTO users (id, email, starting_points) VALUES ($1,$2,100) ON CONFLICT (id) DO NOTHING`, [poor, `${poor}@t.internal`]);
     const res = await placeOrder({ marketId, userId: poor, side: 'buy', price: 90, qty: 50, type: 'limit' }, deps);
     expect(res.status).toBe('error');
-    expect(res.error).toBe('insufficient_cash');
+    expect(res.error).toBe('insufficient_margin');
   });
 
   it('rejects market orders in Plan 2', async () => {
     const res = await placeOrder({ marketId, userId: BUYER, side: 'buy', price: null, qty: 1, type: 'market' }, deps);
     expect(res.status).toBe('error');
     expect(res.error).toBe('market_orders_plan3');
+  });
+
+  it('leveraged long locks less margin — ceil(maxLoss/leverage)', async () => {
+    // Create a fresh market with a bot ask so we can fill immediately.
+    const botUser = uid('ex-lev-bot');
+    const levUser = uid('ex-lev-user');
+    await query(`INSERT INTO users (id, email, starting_points) VALUES ($1,$2,100000),($3,$4,100000) ON CONFLICT (id) DO NOTHING`,
+      [botUser, `${botUser}@t.internal`, levUser, `${levUser}@t.internal`]);
+    const levG = await query(`INSERT INTO groups (name, owner_id) VALUES ('lev-g',$1) RETURNING id`, [botUser]);
+    const { marketId: levMktId } = await createExchangeMarket(
+      { groupId: levG.rows[0].id, creatorId: botUser, title: 'leverage test' }, query
+    );
+    // Bot rests a sell@50 with allowShort so levUser can buy against it.
+    await placeOrder({ marketId: levMktId, userId: botUser, side: 'sell', price: 50, qty: 10, type: 'limit', allowShort: true }, deps);
+    const before = await availableCash(levUser, query);
+    // levUser buys 10@50 with leverage=5: margin = ceil(50*10/5) = 100
+    const res = await placeOrder({ marketId: levMktId, userId: levUser, side: 'buy', price: 50, qty: 10, type: 'limit', leverage: 5 }, deps);
+    expect(res.status).toBe('ok');
+    expect(res.filledQty).toBe(10);
+    const after = await availableCash(levUser, query);
+    expect(after).toBe(before - 100); // ceil(50*10/5) = 100
+    const { rows } = await query(`SELECT shares FROM positions WHERE market_id=$1 AND user_id=$2`, [levMktId, levUser]);
+    expect(rows[0].shares).toBe(10);
   });
 
   it('handles a self-trade without corrupting the position (taker and maker are the same user)', async () => {

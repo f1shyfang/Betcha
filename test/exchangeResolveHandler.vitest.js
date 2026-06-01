@@ -76,13 +76,12 @@ describe('handleResolve — exchange market path', () => {
     const { rows: mRows } = await query(`SELECT state FROM markets WHERE id=$1`, [marketId]);
     expect(mRows[0].state).toBe('resolved');
 
-    // OWNER bought 10 shares @ 60 → buy_fill = −600
-    // OWNER holds 10 long shares → settlement (YES outcome, terminal=100) = +1000
-    // my_delta = −600 + 1000 = +400
+    // Margin model: no buy_fill ledger entry at fill time.
+    // OWNER holds 10 long shares @ avg_entry=60 → settlement (YES, terminal=100) = (100-60)*10 = +400
+    // my_delta = 400
     expect(result.body.market_id).toBe(marketId);
     expect(result.body.outcome).toBe(true);
-    expect(result.body.my_breakdown.settlement).toBe(1000);
-    expect(result.body.my_breakdown.buy_fill).toBe(-600);
+    expect(result.body.my_breakdown.settlement).toBe(400);
     expect(result.body.my_delta).toBe(400);
   });
 
@@ -108,7 +107,7 @@ describe('handleResolve — exchange market path', () => {
       `SELECT COUNT(*)::int AS n FROM ledger_entries WHERE market_id=$1 AND reason='settlement'`,
       [marketId]
     );
-    // OWNER has +1000, bot has -1000 = 2 settlement rows (zero-sum)
+    // OWNER has +400, bot has -400 = 2 settlement rows (zero-sum)
     expect(settlementRows[0].n).toBe(2);
   });
 
