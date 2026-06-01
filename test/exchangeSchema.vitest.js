@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterAll } from 'vitest';
 
-const { query } = require('../server/db');
+const { query, pool } = require('../server/db');
 
 async function columnExists(table, column) {
   const { rows } = await query(
@@ -33,8 +33,12 @@ describe('010_exchange_markets schema', () => {
     }
   });
 
-  it('positions are keyed by (market_id, user_id) and shares can be negative', async () => {
+  it('exchange tables have the expected columns (positions.shares, orders.leverage)', async () => {
     expect(await columnExists('positions', 'shares')).toBe(true);
     expect(await columnExists('orders', 'leverage')).toBe(true);
   });
+});
+
+afterAll(async () => {
+  await pool.end();
 });
