@@ -245,6 +245,28 @@ select:focus {
   border-color: rgba(255, 90, 95, 0.45);
 }
 
+/* Keyboard focus ring for all interactive controls (inputs handle their own
+   above). Buttons and links previously had no visible focus state. */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* Respect users who prefer reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 .button {
   min-height: 52px;
   background: linear-gradient(135deg, var(--primary) 0%, #ff7478 100%);
@@ -693,25 +715,47 @@ select:focus {
   gap: 10px;
 }
 
+.odds-empty {
+  display: grid;
+  gap: 4px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px dashed var(--border);
+  background: var(--surface-2);
+  text-align: center;
+}
+
+.odds-empty strong {
+  font-family: 'Cabinet Grotesk', sans-serif;
+  font-size: 16px;
+  color: var(--ink);
+}
+
+.odds-empty span {
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .odds-bar {
-  display: flex;
+  position: relative;
   height: 12px;
   border-radius: 999px;
   overflow: hidden;
-  background: var(--bg-deep);
+  /* The track is the NO segment; the YES fill scales over it. */
+  background: linear-gradient(90deg, #ff7478, var(--primary));
 }
 
 .odds-fill {
+  position: absolute;
+  inset: 0;
   height: 100%;
-  transition: width 400ms ease-out;
 }
 
+/* Animate via transform (GPU-composited), not width (layout). */
 .odds-fill-yes {
+  transform-origin: left center;
   background: linear-gradient(90deg, var(--secondary), #33d4be);
-}
-
-.odds-fill-no {
-  background: linear-gradient(90deg, #ff7478, var(--primary));
+  transition: transform 400ms ease-out;
 }
 
 .odds-labels {
@@ -757,6 +801,44 @@ select:focus {
   color: #0d6b60;
 }
 
+.resolution-headline {
+  font-family: 'Cabinet Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+  margin-bottom: 12px;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(18, 20, 23, 0.06);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chip-link {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.chip-group-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
 /* ─── Prediction Section ─── */
 
 .prediction-section,
@@ -768,6 +850,39 @@ select:focus {
   display: grid;
   gap: 14px;
   box-shadow: 0 12px 28px rgba(18, 20, 23, 0.06);
+}
+
+.resolve-disclosure {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-family: 'Cabinet Grotesk', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.resolve-disclosure > span:last-child {
+  font-size: 22px;
+  font-weight: 400;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.resolve-body {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
 }
 
 .section-title {
@@ -823,6 +938,56 @@ select:focus {
   color: var(--muted);
 }
 
+.prediction-confirm {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.prediction-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.stake-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.stake-preset {
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.stake-preset:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.stake-preset.is-selected {
+  background: rgba(255, 90, 95, 0.1);
+  border-color: var(--primary);
+  color: #8c2727;
+}
+
 /* ─── Predictions List ─── */
 
 .predictions-list {
@@ -870,6 +1035,27 @@ select:focus {
 .choice-no {
   background: rgba(255, 90, 95, 0.12);
   color: #8c2727;
+}
+
+/* Reusable choice pill (pill shape + choice color via .choice-yes/.choice-no). */
+.choice-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.choice-pill.choice-yes {
+  border-color: rgba(0, 194, 168, 0.25);
+}
+
+.choice-pill.choice-no {
+  border-color: rgba(255, 90, 95, 0.25);
 }
 
 .prediction-result {
@@ -988,7 +1174,9 @@ select:focus {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 3px;
+  min-height: 44px;
   padding: 6px 12px;
   border-radius: 12px;
   color: var(--muted);
