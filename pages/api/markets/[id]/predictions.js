@@ -1,6 +1,7 @@
 import { getUserFromRequest } from '../../../../lib/auth';
 import { applyCors } from '../../../../server/cors';
 import { query } from '../../../../server/db';
+import { getUserBalance } from '../../../../server/queries/balance';
 import { getIdempotentResponse, storeIdempotentResponse } from '../../../../server/idempotency';
 
 async function loadMarketWithMembership(marketId, userId) {
@@ -49,19 +50,6 @@ async function listPredictions(marketId, userId) {
   });
 
   return { status: 200, body: enriched };
-}
-
-async function getUserBalance(userId) {
-  const { rows: userRows } = await query(
-    'SELECT starting_points FROM users WHERE id = $1 LIMIT 1',
-    [userId]
-  );
-  const { rows: ledgerRows } = await query(
-    'SELECT delta FROM ledger_entries WHERE user_id = $1',
-    [userId]
-  );
-  const ledgerTotal = ledgerRows.reduce((sum, row) => sum + (row.delta || 0), 0);
-  return (userRows[0]?.starting_points ?? 2000) + ledgerTotal;
 }
 
 async function createPrediction(marketId, userId, userEmail, choice, stakePoints) {
