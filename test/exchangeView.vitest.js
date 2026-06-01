@@ -84,6 +84,9 @@ describe('positionSummary', () => {
     expect(positionSummary({ shares: -5, avgEntry: 40, leverage: 1, unrealizedPnl: -10, liquidationPrice: 99 }).sideLabel).toBe('Short YES');
     expect(positionSummary({ shares: 0 }).sideLabel).toBe('No position');
   });
+  it('shows Liq — when liquidationPrice is null', () => {
+    expect(positionSummary({ shares: 10, avgEntry: 60, leverage: 1, unrealizedPnl: 0, liquidationPrice: null }).liquidationLabel).toBe('Liq —');
+  });
 });
 
 describe('placeOrderBody', () => {

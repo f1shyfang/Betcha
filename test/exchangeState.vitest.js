@@ -33,6 +33,13 @@ describe('getExchangeState', () => {
     expect(typeof state.mark).toBe('number');
   });
 
+  it('returns a trades array with recent tape entries in chronological order', async () => {
+    const state = await getExchangeState(marketId, BUYER, query);
+    expect(Array.isArray(state.trades)).toBe(true);
+    expect(state.trades.length).toBeGreaterThanOrEqual(1);
+    expect(typeof state.trades[0].price).toBe('number');
+  });
+
   it('includes risk fields for a non-flat position', async () => {
     const state = await getExchangeState(marketId, BUYER, query);
     const pos = state.myPosition;

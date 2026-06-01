@@ -100,7 +100,7 @@ function OrderBook({ book }) {
             marginBottom: '1px',
           }}
         >
-          <span style={{ color: '#8c2727' }}>{formatCents(row.price)}</span>
+          <span style={{ color: '#E84D4D' }}>{formatCents(row.price)}</span>
           <span style={{ textAlign: 'right' }}>{row.qty}</span>
           <span style={{ textAlign: 'right', color: 'var(--muted)' }}>{row.cumulative}</span>
         </div>
@@ -163,7 +163,7 @@ function PositionPanel({ myPosition }) {
   }
 
   const pnlColor =
-    myPosition && myPosition.unrealizedPnl >= 0 ? '#0d6b60' : '#8c2727';
+    myPosition && myPosition.unrealizedPnl >= 0 ? '#0d6b60' : '#E84D4D';
 
   return (
     <div style={{ display: 'grid', gap: '10px' }}>
@@ -175,7 +175,7 @@ function PositionPanel({ myPosition }) {
             background: myPosition.shares > 0
               ? 'rgba(0,194,168,0.1)'
               : 'rgba(255,90,95,0.1)',
-            color: myPosition.shares > 0 ? '#0d6b60' : '#8c2727',
+            color: myPosition.shares > 0 ? '#0d6b60' : '#E84D4D',
             fontFamily: "'Cabinet Grotesk', sans-serif",
             fontWeight: 700,
             fontSize: '13px',
@@ -219,7 +219,7 @@ function PositionPanel({ myPosition }) {
             style={{
               background: 'var(--surface-2)',
               border: '1px solid var(--border)',
-              borderRadius: '10px',
+              borderRadius: '12px',
               padding: '10px 12px',
             }}
           >
@@ -295,7 +295,7 @@ function OpenOrders({ orders, onCancel }) {
                 order.side === 'buy'
                   ? 'rgba(0,194,168,0.1)'
                   : 'rgba(255,90,95,0.1)',
-              color: order.side === 'buy' ? '#0d6b60' : '#8c2727',
+              color: order.side === 'buy' ? '#0d6b60' : '#E84D4D',
               fontSize: '12px',
             }}
           >
@@ -310,7 +310,7 @@ function OpenOrders({ orders, onCancel }) {
             className="button button-secondary button-sm"
             style={{ padding: '4px 12px', minHeight: 32, fontSize: '12px' }}
             onClick={() => onCancel(order.id)}
-            aria-label={`Cancel order at ${formatCents(order.price)}`}
+            aria-label={`Cancel ${order.side} ${order.qty} at ${formatCents(order.price)}`}
           >
             Cancel
           </button>
@@ -458,7 +458,7 @@ function OrderTicket({ marketId, maxLeverage, onOrderSuccess, submittingRef }) {
             border: '2px solid',
             borderColor: side === 'sell' ? 'var(--primary)' : 'var(--border)',
             background: side === 'sell' ? 'rgba(255,90,95,0.1)' : 'var(--surface)',
-            color: side === 'sell' ? '#8c2727' : 'var(--ink)',
+            color: side === 'sell' ? '#E84D4D' : 'var(--ink)',
             fontFamily: "'Cabinet Grotesk', sans-serif",
             fontSize: '15px',
             fontWeight: 700,
@@ -583,7 +583,7 @@ function OrderTicket({ marketId, maxLeverage, onOrderSuccess, submittingRef }) {
                 border: '1px solid',
                 borderColor: leverage === lv ? 'var(--primary)' : 'var(--border)',
                 background: leverage === lv ? 'rgba(255,90,95,0.1)' : 'var(--surface)',
-                color: leverage === lv ? '#8c2727' : 'var(--ink)',
+                color: leverage === lv ? '#E84D4D' : 'var(--ink)',
                 fontSize: '13px',
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -601,7 +601,7 @@ function OrderTicket({ marketId, maxLeverage, onOrderSuccess, submittingRef }) {
       {validationMsg && (
         <p
           role="alert"
-          style={{ margin: 0, fontSize: '13px', color: '#8c2727' }}
+          style={{ margin: 0, fontSize: '13px', color: '#E84D4D' }}
         >
           {validationMsg}
         </p>
@@ -641,6 +641,18 @@ function OrderTicket({ marketId, maxLeverage, onOrderSuccess, submittingRef }) {
 const TABS = ['Book', 'Position', 'Trades'];
 
 function Tabs({ active, onChange }) {
+  const tabRefs = useRef([]);
+
+  const handleKeyDown = (e, index) => {
+    let next = index;
+    if (e.key === 'ArrowRight') next = (index + 1) % TABS.length;
+    else if (e.key === 'ArrowLeft') next = (index - 1 + TABS.length) % TABS.length;
+    else return;
+    e.preventDefault();
+    onChange(TABS[next]);
+    tabRefs.current[next]?.focus();
+  };
+
   return (
     <div
       role="tablist"
@@ -653,19 +665,22 @@ function Tabs({ active, onChange }) {
         padding: '3px',
       }}
     >
-      {TABS.map((t) => (
+      {TABS.map((t, i) => (
         <button
           key={t}
+          ref={(el) => { tabRefs.current[i] = el; }}
           role="tab"
           id={`tab-${t.toLowerCase()}`}
           aria-selected={active === t}
           aria-controls={`panel-${t.toLowerCase()}`}
+          tabIndex={active === t ? 0 : -1}
           onClick={() => onChange(t)}
+          onKeyDown={(e) => handleKeyDown(e, i)}
           style={{
             flex: 1,
             minHeight: 36,
             border: 0,
-            borderRadius: '10px',
+            borderRadius: '12px',
             background: active === t ? 'var(--surface)' : 'transparent',
             boxShadow: active === t ? '0 2px 8px rgba(18,20,23,0.08)' : 'none',
             color: active === t ? 'var(--ink)' : 'var(--muted)',
@@ -831,7 +846,7 @@ export default function ExchangeMarket({ marketId, market }) {
 
         {loadError && (
           <p
-            style={{ margin: 0, fontSize: '13px', color: '#8c2727' }}
+            style={{ margin: 0, fontSize: '13px', color: '#E84D4D' }}
             role="alert"
           >
             {loadError}
@@ -887,38 +902,36 @@ export default function ExchangeMarket({ marketId, market }) {
 
             {activeTab === 'Trades' && (
               <div>
-                {state?.lastTrade != null ? (
-                  <div
-                    style={{
-                      fontFamily: "'Geist', sans-serif",
-                      fontVariantNumeric: 'tabular-nums',
-                      fontSize: '14px',
-                      padding: '8px 0',
-                      borderBottom: '1px solid var(--border)',
-                    }}
+                {state?.trades && state.trades.length > 0 ? (
+                  <ul
+                    style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: '2px' }}
+                    aria-label="Recent trades"
                   >
-                    Last trade: {formatCents(state.lastTrade)}
-                  </div>
+                    {[...state.trades].reverse().map((t, i) => (
+                      <li
+                        key={i}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr',
+                          gap: '4px',
+                          padding: '6px 8px',
+                          borderRadius: '6px',
+                          background: 'var(--surface-2)',
+                          fontFamily: "'Geist', sans-serif",
+                          fontVariantNumeric: 'tabular-nums',
+                          fontSize: '13px',
+                        }}
+                      >
+                        <span style={{ color: 'var(--ink)', fontWeight: 600 }}>{formatCents(t.price)}</span>
+                        <span style={{ textAlign: 'right', color: 'var(--muted)' }}>{t.qty} shares</span>
+                      </li>
+                    ))}
+                  </ul>
                 ) : (
-                  <p
-                    style={{
-                      color: 'var(--muted)',
-                      fontSize: '14px',
-                      margin: '16px 0',
-                    }}
-                  >
+                  <p style={{ color: 'var(--muted)', fontSize: '14px', margin: '16px 0' }}>
                     No trades yet.
                   </p>
                 )}
-                <p
-                  style={{
-                    color: 'var(--muted)',
-                    fontSize: '12px',
-                    marginTop: '12px',
-                  }}
-                >
-                  Full trade tape coming soon.
-                </p>
               </div>
             )}
           </section>

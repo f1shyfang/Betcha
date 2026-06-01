@@ -15,7 +15,7 @@ function ladder(orders) {
 
 async function getExchangeState(marketId, userId, q = defaultQuery) {
   const book = await loadBook(marketId, q);
-  const [lastTradeRes, posRes, ordersRes, cfgRes] = await Promise.all([
+  const [lastTradeRes, posRes, ordersRes, cfgRes, tapeRes] = await Promise.all([
     q(`SELECT price FROM trades WHERE market_id=$1 ORDER BY created_at DESC LIMIT 1`, [marketId]),
     q(
       `SELECT shares, avg_entry, realized_pnl, margin_posted, leverage
@@ -29,6 +29,10 @@ async function getExchangeState(marketId, userId, q = defaultQuery) {
     ),
     q(
       `SELECT maintenance_margin FROM market_exchange_config WHERE market_id=$1`,
+      [marketId]
+    ),
+    q(
+      `SELECT price, quantity AS qty, created_at FROM trades WHERE market_id=$1 ORDER BY created_at DESC LIMIT 30`,
       [marketId]
     ),
   ]);
@@ -87,10 +91,15 @@ async function getExchangeState(marketId, userId, q = defaultQuery) {
     };
   }
 
+  const trades = tapeRes.rows
+    .map((r) => ({ price: r.price, qty: r.qty, at: r.created_at }))
+    .reverse();
+
   return {
     book: { bids: ladder(book.bids), asks: ladder(book.asks) },
     mark,
     lastTrade,
+    trades,
     myPosition,
     myOpenOrders: ordersRes.rows.map((r) => ({ id: r.id, side: r.side, price: r.price, qty: r.qty, status: r.status })),
   };
