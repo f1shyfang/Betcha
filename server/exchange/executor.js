@@ -49,7 +49,7 @@ async function sellableSharesTx(q, marketId, userId) {
 }
 
 async function placeOrder(input, deps) {
-  const { marketId, userId, side, price, qty, type } = input;
+  const { marketId, userId, side, price, qty, type, allowShort = false } = input;
   if (type === 'market') return { status: 'error', error: 'market_orders_plan3' };
 
   const client = await deps.getClient();
@@ -64,12 +64,14 @@ async function placeOrder(input, deps) {
       return { status: 'error', error: 'market_not_open' };
     }
 
-    if (side === 'sell') {
-      const sellable = await sellableSharesTx(q, marketId, userId);
-      if (qty > sellable) { await q('ROLLBACK'); return { status: 'error', error: 'short_not_allowed' }; }
-    } else {
-      const cash = await availableCashTx(q, userId);
-      if (price * qty > cash) { await q('ROLLBACK'); return { status: 'error', error: 'insufficient_cash' }; }
+    if (!allowShort) {
+      if (side === 'sell') {
+        const sellable = await sellableSharesTx(q, marketId, userId);
+        if (qty > sellable) { await q('ROLLBACK'); return { status: 'error', error: 'short_not_allowed' }; }
+      } else {
+        const cash = await availableCashTx(q, userId);
+        if (price * qty > cash) { await q('ROLLBACK'); return { status: 'error', error: 'insufficient_cash' }; }
+      }
     }
 
     const { rows: orows } = await q(
