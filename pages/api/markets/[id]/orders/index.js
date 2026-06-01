@@ -42,6 +42,9 @@ export default async function handler(req, res) {
   if (!Number.isInteger(qtyNum) || qtyNum <= 0) {
     return res.status(400).json({ error: 'qty must be a positive integer' });
   }
+  if (type !== 'limit' && type !== 'market') {
+    return res.status(400).json({ error: 'type must be limit or market' });
+  }
   if (type === 'limit') {
     const priceNum = Number(price);
     if (!Number.isInteger(priceNum) || priceNum < 1 || priceNum > 99) {
@@ -67,15 +70,7 @@ export default async function handler(req, res) {
     );
 
     if (result.status === 'error') {
-      const mapped = {
-        short_not_allowed: 'short_not_allowed',
-        insufficient_cash: 'insufficient_cash',
-        market_not_open: 'market_not_open',
-        market_orders_plan3: 'market_orders_plan3',
-      };
-      if (mapped[result.error]) {
-        return res.status(400).json({ error: result.error });
-      }
+      // All executor business-logic rejections map to 400 with the error code.
       return res.status(400).json({ error: result.error });
     }
 
