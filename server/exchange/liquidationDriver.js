@@ -113,7 +113,7 @@ async function runLiquidations(marketId, deps) {
     }
 
     // 3b. Submit forced close (allowShort bypasses margin/short checks)
-    await placeOrder(
+    const orderResult = await placeOrder(
       {
         marketId,
         userId: pos.user_id,
@@ -135,6 +135,14 @@ async function runLiquidations(marketId, deps) {
 
     if (afterShares !== 0) {
       // Residual remains — book couldn't fill within the cap. Cover via insurance pool.
+      // Cancel any still-resting portion of the forced-close order so it cannot
+      // re-open the position at a later crossing price or freeze the user's escrow.
+      if (orderResult && orderResult.orderId) {
+        await q(
+          `UPDATE orders SET status='cancelled' WHERE id=$1 AND status IN ('open','partial')`,
+          [orderResult.orderId]
+        );
+      }
       const residualShares = afterShares;
       const residualAbs = Math.abs(residualShares);
       const residualEntry = afterRows.length > 0 ? Number(afterRows[0].avg_entry) : avgEntry;
