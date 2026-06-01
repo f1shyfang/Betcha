@@ -10,6 +10,7 @@ import {
   stakeValidationMessage,
   shareText,
   inviteText,
+  marketStateLabel,
 } from '../lib/predictionForm.js';
 
 describe('predictionErrorMessage', () => {
@@ -180,5 +181,22 @@ describe('inviteText', () => {
 
   it('contains no em dash (copy rule)', () => {
     expect(inviteText('Anything', 'https://x.test')).not.toMatch(/—|--/);
+  });
+});
+
+describe('marketStateLabel', () => {
+  it('capitalizes the known states', () => {
+    expect(marketStateLabel('open')).toBe('Open');
+    expect(marketStateLabel('resolved')).toBe('Resolved');
+  });
+
+  it('capitalizes any other state instead of leaking a raw lowercase enum', () => {
+    expect(marketStateLabel('disputed')).toBe('Disputed');
+  });
+
+  it('is empty for a missing state', () => {
+    expect(marketStateLabel('')).toBe('');
+    expect(marketStateLabel(null)).toBe('');
+    expect(marketStateLabel(undefined)).toBe('');
   });
 });
