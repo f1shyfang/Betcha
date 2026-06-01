@@ -33,7 +33,7 @@ export default async function handler(req, res) {
   }
 
   const marketId = req.query.id;
-  const { side, price, qty, type } = req.body || {};
+  const { side, price, qty, type, leverage: leverageRaw } = req.body || {};
 
   // Validate inputs
   if (!['buy', 'sell'].includes(side)) {
@@ -52,6 +52,11 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'price must be an integer between 1 and 99 for limit orders' });
     }
   }
+  // leverage: optional, integer >= 1, defaults to 1 if omitted/null
+  const leverage = leverageRaw == null ? 1 : Number(leverageRaw);
+  if (!Number.isInteger(leverage) || leverage < 1) {
+    return res.status(400).json({ error: 'leverage must be an integer >= 1' });
+  }
 
   const idempKey = req.headers['idempotency-key'];
 
@@ -66,7 +71,7 @@ export default async function handler(req, res) {
     if (memberStatus.forbidden) return res.status(403).json({ error: 'forbidden' });
 
     const result = await placeOrder(
-      { marketId, userId: user.id, side, price: Number(price), qty: qtyNum, type },
+      { marketId, userId: user.id, side, price: Number(price), qty: qtyNum, type, leverage },
       { getClient }
     );
 

@@ -32,4 +32,34 @@ describe('getExchangeState', () => {
     expect(Array.isArray(state.myOpenOrders)).toBe(true);
     expect(typeof state.mark).toBe('number');
   });
+
+  it('includes risk fields for a non-flat position', async () => {
+    const state = await getExchangeState(marketId, BUYER, query);
+    const pos = state.myPosition;
+    // shares = 4 (long), leverage = 1 (default)
+    expect(typeof pos.marginPosted).toBe('number');
+    expect(typeof pos.unrealizedPnl).toBe('number');
+    expect(typeof pos.liquidationPrice).toBe('number');
+    expect(typeof pos.bankruptcyPrice).toBe('number');
+    // Long at entry=63, leverage=1:
+    //   bankruptcyPrice = 63 * (1 - 1/1) = 0
+    //   liquidationPrice = 0 + maintenanceMargin (≥ 0)
+    expect(pos.bankruptcyPrice).toBe(0);
+    expect(pos.liquidationPrice).toBeGreaterThanOrEqual(0);
+  });
+
+  it('flat position has null/zero risk fields', async () => {
+    // Query with a user who has no position
+    const NO_POS_USER = `flat-${Math.random().toString(36).slice(2)}`;
+    await query(
+      `INSERT INTO users (id, email, starting_points) VALUES ($1,$2,100000) ON CONFLICT (id) DO NOTHING`,
+      [NO_POS_USER, `${NO_POS_USER}@t.internal`]
+    );
+    const state = await getExchangeState(marketId, NO_POS_USER, query);
+    expect(state.myPosition.shares).toBe(0);
+    expect(state.myPosition.marginPosted).toBe(0);
+    expect(state.myPosition.unrealizedPnl).toBe(0);
+    expect(state.myPosition.liquidationPrice).toBeNull();
+    expect(state.myPosition.bankruptcyPrice).toBeNull();
+  });
 });

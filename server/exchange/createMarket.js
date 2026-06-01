@@ -2,6 +2,7 @@
 // its market_exchange_config row. Returns { marketId }. Caller handles auth and
 // group membership; this is the data-layer helper.
 const { query: defaultQuery } = require('../db');
+const { ensureInsurance } = require('./insurance');
 
 async function createExchangeMarket({ groupId, creatorId, title, seedPrice = 50 }, q = defaultQuery) {
   const { rows } = await q(
@@ -14,6 +15,7 @@ async function createExchangeMarket({ groupId, creatorId, title, seedPrice = 50 
     `INSERT INTO market_exchange_config (market_id, seed_price) VALUES ($1, $2)`,
     [marketId, seedPrice]
   );
+  await ensureInsurance(marketId, q);
   return { marketId };
 }
 
