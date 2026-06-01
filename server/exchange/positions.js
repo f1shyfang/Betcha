@@ -10,6 +10,9 @@ function emptyPosition() {
 
 // 'buy' moves shares up (+qty), 'sell' moves shares down (-qty).
 function applyFill(position, side, price, qty) {
+  if (qty <= 0) {
+    return { shares: position.shares, avgEntry: position.avgEntry, realizedPnl: position.realizedPnl };
+  }
   const signed = side === 'buy' ? qty : -qty;
   const oldShares = position.shares;
   let realized = position.realizedPnl;

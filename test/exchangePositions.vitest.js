@@ -38,4 +38,15 @@ describe('applyFill', () => {
     // close 10 long @ (70-60)=+100; open 5 short @70
     expect(p).toEqual({ shares: -5, avgEntry: 70, realizedPnl: 100 });
   });
+
+  it('adds to a short with a weighted average entry', () => {
+    let p = applyFill(emptyPosition(), 'sell', 60, 10);
+    p = applyFill(p, 'sell', 70, 10);
+    expect(p).toEqual({ shares: -20, avgEntry: 65, realizedPnl: 0 });
+  });
+
+  it('returns the position unchanged for a non-positive quantity', () => {
+    const start = applyFill(emptyPosition(), 'buy', 60, 10);
+    expect(applyFill(start, 'buy', 99, 0)).toEqual({ shares: 10, avgEntry: 60, realizedPnl: 0 });
+  });
 });
