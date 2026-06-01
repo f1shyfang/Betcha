@@ -62,4 +62,36 @@ describe('placeOrder', () => {
     expect(res.status).toBe('error');
     expect(res.error).toBe('market_orders_plan3');
   });
+
+  it('handles a self-trade without corrupting the position (taker and maker are the same user)', async () => {
+    const self = uid('ex-self');
+    await query(`INSERT INTO users (id, email, starting_points) VALUES ($1,$2,100000) ON CONFLICT (id) DO NOTHING`, [self, `${self}@t.internal`]);
+    // Use a dedicated market so no existing orders interfere with the self-cross.
+    const { marketId: selfMarketId } = await createExchangeMarket(
+      { groupId: GROUP, creatorId: self, title: 'self-trade test' }, query
+    );
+    // Give the user 50 shares so they can later sell, and enough cash to buy.
+    await query(
+      `INSERT INTO positions (market_id, user_id, shares, avg_entry) VALUES ($1,$2,50,40)
+       ON CONFLICT (market_id,user_id) DO UPDATE SET shares=50, avg_entry=40`,
+      [selfMarketId, self]
+    );
+    // Rest a buy at 55. In a fresh, empty book this will not cross anything.
+    await placeOrder({ marketId: selfMarketId, userId: self, side: 'buy', price: 55, qty: 10, type: 'limit' }, deps);
+    // Snapshot shares AFTER resting the buy (buy doesn't change shares, only reserves cash).
+    const { rows: beforeRows } = await query(
+      `SELECT shares FROM positions WHERE market_id=$1 AND user_id=$2`,
+      [selfMarketId, self]
+    );
+    const sharesBefore = beforeRows[0].shares;
+    // Now place a marketable sell at 55 — it crosses the user's own resting buy.
+    const res = await placeOrder({ marketId: selfMarketId, userId: self, side: 'sell', price: 55, qty: 10, type: 'limit' }, deps);
+    expect(res.status).toBe('ok');
+    const { rows: afterRows } = await query(
+      `SELECT shares FROM positions WHERE market_id=$1 AND user_id=$2`,
+      [selfMarketId, self]
+    );
+    // Self-cross is a wash: the buy (+10) and the sell (-10) net to zero.
+    expect(afterRows[0].shares).toBe(sharesBefore);
+  });
 });

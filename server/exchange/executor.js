@@ -14,7 +14,7 @@ async function loadPosition(q, marketId, userId) {
     [marketId, userId]
   );
   if (rows.length === 0) return emptyPosition();
-  return { shares: rows[0].shares, avgEntry: Number(rows[0].avg_entry), realizedPnl: rows[0].realized_pnl };
+  return { shares: Number(rows[0].shares), avgEntry: Number(rows[0].avg_entry), realizedPnl: Number(rows[0].realized_pnl) };
 }
 
 async function savePosition(q, marketId, userId, p) {
@@ -82,6 +82,7 @@ async function placeOrder(input, deps) {
     const book = await loadBook(marketId, q);
     book.bids = book.bids.filter((o) => o.id !== incomingId);
     book.asks = book.asks.filter((o) => o.id !== incomingId);
+    book.byId.delete(incomingId);
 
     const { fills, filledQty, residualQty } = matchOrder({ side, price, qty }, book);
 
@@ -91,8 +92,15 @@ async function placeOrder(input, deps) {
     for (const fill of fills) {
       const maker = book.byId.get(fill.makerId);
       takerPos = applyFill(takerPos, side, fill.price, fill.qty);
-      if (!makerPos.has(maker.userId)) makerPos.set(maker.userId, await loadPosition(q, marketId, maker.userId));
-      makerPos.set(maker.userId, applyFill(makerPos.get(maker.userId), maker.side, fill.price, fill.qty));
+      if (maker.userId === userId) {
+        // Self-trade: same DB position. Apply the maker side to the SAME in-memory
+        // object so we don't load/save two divergent copies (the second save would
+        // clobber the first). Net effect on a self-cross is a wash.
+        takerPos = applyFill(takerPos, maker.side, fill.price, fill.qty);
+      } else {
+        if (!makerPos.has(maker.userId)) makerPos.set(maker.userId, await loadPosition(q, marketId, maker.userId));
+        makerPos.set(maker.userId, applyFill(makerPos.get(maker.userId), maker.side, fill.price, fill.qty));
+      }
 
       await q(
         `UPDATE orders SET filled_quantity = filled_quantity + $2,
