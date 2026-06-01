@@ -4,6 +4,8 @@ const { query, pool, getClient } = require('../server/db');
 const { createExchangeMarket } = require('../server/exchange/createMarket');
 const { placeOrder } = require('../server/exchange/executor');
 const { getExchangeState } = require('../server/exchange/exchangeState');
+const { ensureBot } = require('../server/exchange/botAccount');
+const { requoteBot } = require('../server/exchange/botDriver');
 
 const SELLER = uid('st-seller');
 const BUYER = uid('st-buyer');
@@ -20,13 +22,16 @@ beforeAll(async () => {
   await placeOrder({ marketId, userId: SELLER, side: 'sell', price: 63, qty: 10, type: 'limit' }, { getClient });
   await placeOrder({ marketId, userId: SELLER, side: 'sell', price: 65, qty: 10, type: 'limit' }, { getClient });
   await placeOrder({ marketId, userId: BUYER, side: 'buy', price: 63, qty: 4, type: 'limit' }, { getClient }); // crosses -> 1 trade
+  // Ensure bot exists and posts quotes so bot orders appear in the book.
+  await ensureBot(marketId, query);
+  await requoteBot(marketId, { query, getClient });
 });
 afterAll(async () => { await pool.end(); });
 
 describe('getExchangeState', () => {
   it('returns the book ladder, mark, last trade, my position and my open orders', async () => {
     const state = await getExchangeState(marketId, BUYER, query);
-    expect(state.book.asks).toEqual(expect.arrayContaining([{ price: 63, qty: 6 }, { price: 65, qty: 10 }]));
+    expect(state.book.asks).toEqual(expect.arrayContaining([{ price: 63, qty: 6, botQty: 0 }, { price: 65, qty: 10, botQty: 0 }]));
     expect(state.lastTrade).toBe(63);
     expect(state.myPosition.shares).toBe(4);
     expect(Array.isArray(state.myOpenOrders)).toBe(true);
@@ -68,5 +73,44 @@ describe('getExchangeState', () => {
     expect(state.myPosition.unrealizedPnl).toBe(0);
     expect(state.myPosition.liquidationPrice).toBeNull();
     expect(state.myPosition.bankruptcyPrice).toBeNull();
+  });
+
+  it('book entries include botQty field', async () => {
+    const state = await getExchangeState(marketId, BUYER, query);
+    // After requoteBot, bot should have quotes on the ask side
+    expect(state.book.asks.length).toBeGreaterThan(0);
+    expect(typeof state.book.asks[0].botQty).toBe('number');
+    expect(state.book.asks[0].botQty).toBeGreaterThanOrEqual(0);
+    // bids too
+    if (state.book.bids.length > 0) {
+      expect(typeof state.book.bids[0].botQty).toBe('number');
+    }
+  });
+
+  it('returns a bot object with expected shape', async () => {
+    const state = await getExchangeState(marketId, BUYER, query);
+    expect(state.bot).toBeDefined();
+    expect(typeof state.bot.inventory).toBe('number');
+    expect(typeof state.bot.maxInventory).toBe('number');
+    expect(typeof state.bot.capUsedPct).toBe('number');
+    // bestBid / bestAsk are number-or-null
+    expect(state.bot.bestBid === null || typeof state.bot.bestBid === 'number').toBe(true);
+    expect(state.bot.bestAsk === null || typeof state.bot.bestAsk === 'number').toBe(true);
+    // spread is number-or-null
+    expect(state.bot.spread === null || typeof state.bot.spread === 'number').toBe(true);
+    // fairValue should be a number
+    expect(typeof state.bot.fairValue).toBe('number');
+  });
+
+  it('returns recentOrders array with isBot and status', async () => {
+    const state = await getExchangeState(marketId, BUYER, query);
+    expect(Array.isArray(state.recentOrders)).toBe(true);
+    expect(state.recentOrders.length).toBeGreaterThanOrEqual(1);
+    for (const o of state.recentOrders) {
+      expect(typeof o.isBot).toBe('boolean');
+      expect(typeof o.status).toBe('string');
+      expect(typeof o.side).toBe('string');
+      expect(typeof o.price).toBe('number');
+    }
   });
 });
