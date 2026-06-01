@@ -9,7 +9,7 @@ const handleResolve = async (deps) => {
     if (prior) return { status: 200, body: prior };
 
     const { rows: marketRows } = await query(
-      'SELECT id, group_id, state FROM markets WHERE id = $1 LIMIT 1',
+      'SELECT id, group_id, state, mechanism FROM markets WHERE id = $1 LIMIT 1',
       [marketId]
     );
     const market = marketRows[0];
@@ -23,10 +23,17 @@ const handleResolve = async (deps) => {
     if (memberRows.length === 0) return { status: 403, body: { error: 'forbidden' } };
 
     try {
-      await query(
-        'SELECT market_resolve_with_ledger($1, $2, $3, $4, $5)',
-        [marketId, userId || null, outcome, method, reason]
-      );
+      if (market.mechanism === 'exchange') {
+        await query(
+          'SELECT market_resolve_exchange($1, $2, $3, $4, $5)',
+          [marketId, userId || null, outcome, method, reason]
+        );
+      } else {
+        await query(
+          'SELECT market_resolve_with_ledger($1, $2, $3, $4, $5)',
+          [marketId, userId || null, outcome, method, reason]
+        );
+      }
     } catch (rpcError) {
       // 42883 = undefined_function (migration not applied)
       if (rpcError.code === '42883') {
