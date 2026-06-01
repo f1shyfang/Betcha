@@ -1,7 +1,10 @@
 import { getUserFromRequest } from '../../../lib/auth';
 import { applyCors } from '../../../server/cors';
-import { query } from '../../../server/db';
+import { query, getClient } from '../../../server/db';
 import { getIdempotentResponse, storeIdempotentResponse } from '../../../server/idempotency';
+import { createExchangeMarket } from '../../../server/exchange/createMarket';
+import { ensureBot } from '../../../server/exchange/botAccount';
+import { requoteBot } from '../../../server/exchange/botDriver';
 
 async function assertGroupMembership(groupId, userId) {
   const { rows } = await query(
@@ -23,6 +26,28 @@ async function createMarket(user, payload) {
      RETURNING *`,
     [group_id, user.id, title, resolve_by || null]
   );
+  return { market: rows[0] };
+}
+
+async function createExchangeMarketFull(user, payload) {
+  const { group_id, title, resolve_by, seed_price } = payload;
+
+  const isMember = await assertGroupMembership(group_id, user.id);
+  if (!isMember) return { forbidden: true };
+
+  const seedPrice = seed_price || 50;
+  const { marketId } = await createExchangeMarket(
+    { groupId: group_id, creatorId: user.id, title, seedPrice },
+    query
+  );
+  await ensureBot(marketId, query);
+  try {
+    await requoteBot(marketId, { getClient, query });
+  } catch (e) {
+    console.error('[exchange] requoteBot failed during market creation:', e);
+  }
+
+  const { rows } = await query(`SELECT * FROM markets WHERE id=$1`, [marketId]);
   return { market: rows[0] };
 }
 
@@ -53,8 +78,15 @@ export default async function handler(req, res) {
     const user = await getUserFromRequest(req);
     if (!user) return res.status(401).json({ error: 'unauthorized' });
 
-    const { group_id, title, resolve_by } = req.body;
+    const { group_id, title, resolve_by, mechanism, seed_price } = req.body;
     if (!group_id || !title) return res.status(400).json({ error: 'group_id and title are required' });
+
+    if (seed_price !== undefined && seed_price !== null) {
+      const sp = Number(seed_price);
+      if (!Number.isInteger(sp) || sp < 1 || sp > 99) {
+        return res.status(400).json({ error: 'seed_price must be an integer between 1 and 99' });
+      }
+    }
 
     const idempKey = req.headers['idempotency-key'];
 
@@ -64,7 +96,12 @@ export default async function handler(req, res) {
         if (prior) return res.status(200).json(prior);
       }
 
-      const result = await createMarket(user, { group_id, title, resolve_by });
+      let result;
+      if (mechanism === 'exchange') {
+        result = await createExchangeMarketFull(user, { group_id, title, resolve_by, seed_price: seed_price ? Number(seed_price) : 50 });
+      } else {
+        result = await createMarket(user, { group_id, title, resolve_by });
+      }
       if (result.forbidden) return res.status(403).json({ error: 'forbidden' });
       if (idempKey) await storeIdempotentResponse(idempKey, result.market);
       return res.status(200).json(result.market);

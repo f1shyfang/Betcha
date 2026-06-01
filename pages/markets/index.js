@@ -13,6 +13,8 @@ export default function MarketsIndex() {
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [mechanism, setMechanism] = useState('quick');
+  const [seedPrice, setSeedPrice] = useState(50);
 
   useEffect(() => {
     fetchMarkets();
@@ -68,15 +70,20 @@ export default function MarketsIndex() {
         return;
       }
 
+      const body = {
+        title: newMarketTitle.trim(),
+        group_id: selectedGroupId,
+        mechanism,
+      };
+      if (mechanism === 'exchange') {
+        body.seed_price = seedPrice;
+      }
       const res = await fetch('/api/markets', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          title: newMarketTitle.trim(),
-          group_id: selectedGroupId
-        })
+        body: JSON.stringify(body)
       });
 
       const data = await res.json();
@@ -177,6 +184,47 @@ export default function MarketsIndex() {
                   </select>
                 </label>
               </div>
+              <div className="form-row">
+                <span className="label" style={{ display: 'block', marginBottom: '8px' }}>Market Type</span>
+                <div style={{ display: 'flex', gap: '0', borderRadius: '8px', overflow: 'hidden', border: '1.5px solid #E6E9EB', width: 'fit-content' }}>
+                  {[{ value: 'quick', label: 'Quick Bet' }, { value: 'exchange', label: 'Exchange' }].map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setMechanism(value)}
+                      style={{
+                        padding: '8px 18px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        fontSize: '14px',
+                        fontWeight: mechanism === value ? '600' : '400',
+                        background: mechanism === value ? '#FF5A5F' : '#FAFBFB',
+                        color: mechanism === value ? '#fff' : '#121417',
+                        transition: 'background 150ms ease-out, color 150ms ease-out',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {mechanism === 'exchange' && (
+                <div className="form-row">
+                  <label className="label">
+                    Starting Probability (1–99)
+                    <input
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={seedPrice}
+                      onChange={(e) => setSeedPrice(Number(e.target.value))}
+                      style={{ width: '100px' }}
+                      required
+                    />
+                  </label>
+                </div>
+              )}
               <button type="submit" className="button" disabled={creating}>
                 {creating ? 'Creating...' : 'Create Market'}
               </button>
