@@ -3,6 +3,7 @@ import { applyCors } from '../../../../../server/cors';
 import { query, getClient } from '../../../../../server/db';
 import { getIdempotentResponse, storeIdempotentResponse } from '../../../../../server/idempotency';
 import { placeOrder } from '../../../../../server/exchange/executor';
+import { requoteBot } from '../../../../../server/exchange/botDriver';
 
 async function loadMarketWithMembership(marketId, userId) {
   const { rows: marketRows } = await query(
@@ -75,6 +76,15 @@ export default async function handler(req, res) {
     }
 
     if (idempKey) await storeIdempotentResponse(idempKey, result);
+
+    // Best-effort requote: placeOrder has already committed, so this is safe.
+    // A requote failure must never surface as an order error.
+    try {
+      await requoteBot(marketId, { getClient, query });
+    } catch (e) {
+      console.error('bot requote after order failed', e);
+    }
+
     return res.status(200).json(result);
   } catch (err) {
     console.error('place order error', err);
