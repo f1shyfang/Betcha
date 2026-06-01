@@ -4,7 +4,8 @@ import { authClient } from '../../lib/authClient';
 import Head from 'next/head';
 import Link from 'next/link';
 import { resolveMarket } from '../../lib/api';
-import { predictionErrorMessage, stablePredictionKey, applyOptimisticPrediction, shouldPoll, resolveSummary, clampStake, stakePresets, stakeValidationMessage, shareText, inviteText } from '../../lib/predictionForm';
+import { predictionErrorMessage, stablePredictionKey, applyOptimisticPrediction, shouldPoll, resolveSummary, clampStake, stakePresets, stakeValidationMessage, shareText, inviteText, marketStateLabel } from '../../lib/predictionForm';
+import ExchangeMarket from '../../components/ExchangeMarket';
 
 export default function MarketDetail() {
   const router = useRouter();
@@ -325,6 +326,45 @@ export default function MarketDetail() {
   }
   if (!market) return <div className="page">Market not found or unauthorized.</div>;
 
+  // ── Exchange market: render Layout C, skip all quick-bet code below ──
+  if (market.mechanism === 'exchange') {
+    return (
+      <div className="page">
+        <Head><title>{market.title} - Betcha</title></Head>
+        <header className="topbar">
+          <div className="brand-lockup">
+            <span className="brand-mark">B</span>
+            <div className="brand-name">Betcha</div>
+          </div>
+        </header>
+        <main>
+          <button
+            className="button button-ghost"
+            onClick={() => router.push(`/groups/${market.group_id}`)}
+            style={{ marginBottom: '16px', padding: 0 }}
+          >
+            ← Back to Group
+          </button>
+          <ExchangeMarket marketId={id} market={market} />
+        </main>
+        <nav className="bottom-nav" aria-label="Main navigation">
+          <Link href="/" className="bottom-nav-item">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            <span>Home</span>
+          </Link>
+          <Link href="/groups" className="bottom-nav-item">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Groups</span>
+          </Link>
+          <Link href="/markets" className="bottom-nav-item bottom-nav-active">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+            <span>Markets</span>
+          </Link>
+        </nav>
+      </div>
+    );
+  }
+
   const total = yesCount + noCount;
   const yesPct = total > 0 ? Math.round((yesCount / total) * 100) : 50;
   const noPct = 100 - yesPct;
@@ -340,7 +380,10 @@ export default function MarketDetail() {
   const settlement = market.my_settlement || { total_delta: 0, breakdown: {} };
   const settlementEntries = Object.entries(settlement.breakdown || {});
   const myBalance = market.my_balance ?? 0;
-  const myStake = market.my_prediction?.stake_points ?? 0;
+  // Prefer the market endpoint's value; fall back to the predictions list so a
+  // resolved market still shows the user's stake if my_prediction isn't hydrated.
+  const myPredictionFromList = currentUserId ? predictions.find((p) => p.user_id === currentUserId) : null;
+  const myStake = market.my_prediction?.stake_points ?? myPredictionFromList?.stake_points ?? 0;
   const stakeError = stakeValidationMessage(stakePoints, myBalance);
   const presets = stakePresets(myBalance);
 
@@ -362,7 +405,7 @@ export default function MarketDetail() {
         <section className="market-detail-hero">
           <div className="market-detail-header">
             <span className={`market-pill ${market.state === 'open' ? 'live' : ''}`}>
-              {market.state === 'open' ? 'Open' : market.state === 'resolved' ? 'Resolved' : market.state}
+              {marketStateLabel(market.state)}
             </span>
             {market.state === 'open' && (
               <button
